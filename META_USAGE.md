@@ -28,3 +28,6 @@ All Meta AI calls go through one module: `src/meta/muse.js`. Nothing else in the
 | 7 | **MMS-TTS** (`facebook/mms-tts-eng`, run with transformers.js as `Xenova/mms-tts-eng`) | `src/meta/tts.js` → `speak()`, called from `src/core/askQuestions.js` | Speaks Muse Spark's clarifying questions aloud in the voice call. The Meta Model API has no TTS, so we use Meta's open-weights speech model. | Planned (Phase 3b) |
 
 Non-Meta AI services used: **none**.
+
+## Log by phase
+- **Phase 1:** no AI calls. The voice receive test saves raw audio to local WAV files only.

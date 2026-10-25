@@ -2,8 +2,8 @@
 
 | Phase | Status |
 |---|---|
-| 0. Plan & verify | ✅ Done; waiting on credentials in `.env` and "go" |
-| 1. Bot skeleton + **voice receive spike** + crew self-registration | ⏳ Not started |
+| 0. Plan & verify | ✅ Done |
+| 1. Bot skeleton + **voice receive spike** + crew self-registration | 🧪 Code complete; waiting for your live test (bot needs to be invited) |
 | 2. Voice capture + Muse Voice Transcribe + live screen (transcript) | ⏳ Not started |
 | 3. Muse Spark summary + live screen (rolling insights, reasoning) | ⏳ Not started |
 | 3b. "Any questions, Meta?" spoken gap questions | ⏳ Not started |
@@ -33,6 +33,21 @@
 - **Calendar privacy:** events are created with `guestsCanSeeOtherGuests: false`, so invitees don't see each other's emails.
 - **GitHub:** remote `https://github.com/Orbit-Meta/ORBIT`, branch `main`. Repo-local git identity: `sasha <sashanasdaq@gmail.com>`.
 - **Secrets:** all in `.env` (gitignored). `.env.example` is committed.
+
+### Phase 1 decisions
+- **Audio decoding:** opusscript decodes each Opus packet directly to **24 kHz mono PCM16**, which is Muse's `PCM_24KHZ` format, so there's no resampling step.
+  - Verified with a 440 Hz round-trip test: frequency and amplitude come out the same.
+  - Decoding packet by packet means a bad packet costs 20 ms of audio instead of the whole stream.
+  - prism-media is not used.
+- **Pause:** packets that arrive while paused are dropped before decoding. Nothing from a pause is decoded, stored, or sent.
+- **Slash commands** are registered to the one server on startup, so they appear instantly. Commands work only in servers (no DMs).
+- **Small additions beyond the spec** (needed for the flow or for consent; easy to remove if you'd rather not have them):
+  - `/resume`: without it, `/pause` can't be undone.
+  - A heads-up message (@mention) to anyone who joins the call while Orbit is listening.
+  - Orbit leaves automatically when every human has left the call.
+- **Stage channel fallback** is built in. When joining a Stage channel, Orbit tries to become a speaker; that needs the Mute Members permission, and without it Orbit only listens.
+- **Startup check:** if `DISCORD_GUILD_ID` isn't a server the bot is in, startup prints the servers it is in plus an invite link.
+- **Voice debugging:** set `ORBIT_VOICE_DEBUG=1` in `.env` for detailed voice and DAVE logs.
 - **Storage:** JSON files under `data/` (gitignored). Private constraints are kept in a separate file.
 
 ## Verification log (2026-10-25)
@@ -46,5 +61,6 @@
   - limits: 256 concurrent streams and 16k streams/hour
 
 ## Open issues
+- **Phase 1 live test pending:** on 2026-10-25 the bot logged in successfully but had not been invited to any server yet.
 - **Dev environment note:** Windows PowerShell 5.1 reads UTF-8 files without a BOM as ANSI. Edit files with Node or the editor, not `Get-Content`/`Set-Content`.
 - **Not in the docs:** realtime handshake field names for `ENDPOINTING` settings. We don't need them; we use `PUSH_TO_TALK` per utterance.
