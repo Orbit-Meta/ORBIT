@@ -8,7 +8,7 @@ const PAGE = fs.readFileSync(new URL('./public/index.html', import.meta.url));
 const MAX_MUSE_LOG = 60;
 
 const clients = new Set();
-const snapshot = { session: null, partials: {}, finals: [], muse: [] };
+const snapshot = { session: null, partials: {}, finals: [], muse: [], insights: null, thinking: null };
 
 function broadcast(type, data) {
   const frame = `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -19,6 +19,7 @@ bus.on('session', (s) => {
   if (s.state === 'listening' && snapshot.session?.startedAt !== s.startedAt) {
     snapshot.finals = [];
     snapshot.partials = {};
+    snapshot.insights = null;
   }
   snapshot.session = s;
   broadcast('session', s);
@@ -34,6 +35,14 @@ bus.on('partial-clear', (p) => {
 bus.on('final', (entry) => {
   snapshot.finals.push(entry);
   broadcast('final', entry);
+});
+bus.on('insights', (i) => {
+  snapshot.insights = i;
+  broadcast('insights', i);
+});
+bus.on('thinking', (t) => {
+  snapshot.thinking = t.active ? t : null;
+  broadcast('thinking', t);
 });
 bus.on('muse', (call) => {
   snapshot.muse.push(call);

@@ -4,8 +4,8 @@
 |---|---|
 | 0. Plan & verify | ✅ Done |
 | 1. Bot skeleton + **voice receive spike** + crew self-registration | ✅ Done; verified live by Sasha |
-| 2. Voice capture + Muse Voice Transcribe + live screen (transcript) | 🧪 Code complete and tested against a protocol test double; waiting for `MODEL_API_KEY` and a live test |
-| 3. Muse Spark summary + live screen (rolling insights, reasoning) | ⏳ Not started |
+| 2. Voice capture + Muse Voice Transcribe + live screen (transcript) | ✅ Done; live call produced an accurate 13-line, speaker-labeled transcript |
+| 3. Muse Spark summary + live screen (rolling insights, reasoning) | 🧪 Done and tested with real Muse Spark + a real Discord post; waiting for your review |
 | 3b. "Any questions, Meta?" spoken gap questions | ⏳ Not started |
 | 4. Private constraints + plan resolution | ⏳ Not started |
 | 5. Google Calendar | ⏳ Not started |
@@ -76,6 +76,28 @@
 - **Short sounds:** a 100 ms "cough" was dropped.
 - **Live screen:** the page is served, a new viewer gets the current state plus live events, and the page script parses.
 
+### Phase 3 decisions
+- **`reason()` in `muse.js`:** Muse Spark through the Responses API, streamed, with `store: false`.
+  - Output is enforced by a strict JSON schema.
+  - Reasoning summaries stream to the live screen's "Muse Spark is thinking" strip.
+  - Every call is logged with latency and tokens.
+- **Prompts and schemas** are all in `src/meta/prompts.js`, readable for judges.
+- **`summarizeCall()`** (`src/core/`) is a connector-ready pure function: transcript lines + who was in the call + absent crew + time zone in, `CALL_SUMMARY_SCHEMA` JSON out. Relative dates ("this Friday") are resolved against the current date in `TIMEZONE`.
+- **Live notes:** `low` effort, throttled to roughly every 12 s while people talk (the first update waits 4 s to collect a few lines). Never more than one Spark call at a time.
+- **Recap:** `medium` effort. It's posted to `DISCORD_RECAP_CHANNEL_ID` on `/recap`, and automatically when the call ends (`/stop` or everyone leaves) unless `/recap` already covered every line.
+  - It @mentions registered crew members who weren't in the call.
+  - Raw JSON is saved to `data/summaries/<transcript id>.json`.
+  - `/recap` still works after `/stop` (it uses the most recent call).
+- **Recap privacy:** the recap contains only what was said out loud in the call. The prompt tells Spark not to bring up budgets or diet unless someone said them aloud.
+
+### Phase 3 test results (real Muse Spark, real Discord)
+- **Input:** the real 13-line Phase 2 transcript.
+- **Output:** correct. "This Friday" resolved to 2026-10-30. "Three after five" was corrected to "free after 5". slimy's 2 pm commitment was captured. Angel was flagged in `needs_input_from`.
+- **Recap message:** posted to #general through the real `postRecap()`.
+- **Bugs found and fixed:**
+  - Live notes used a debounce, which never fired while people kept talking. Switched to a throttle.
+  - The recap's call length used "now" instead of when the call ended.
+
 ## Verification log (2026-10-25)
 - **DAVE is mandatory:** Discord has enforced E2EE voice since March 2026.
 - **@discordjs/voice 0.19.2:** contains PR #11449, the probable DAVE receive fix. Not publicly confirmed; packet-loss issue #11441 was closed without a fix.
@@ -90,8 +112,7 @@
 - **Phase 1 live test passed.** Sasha confirmed `/orbit-setup` and separate per-speaker audio streams both worked. Two speakers each produced a clean 10.0 s WAV.
   - **Voice receive works with DAVE on @discordjs/voice 0.19.2** in a regular voice channel, so the Stage fallback wasn't needed.
 - **Minor:** a display name with no letters or digits turns into the filename `_`. This only affects the Phase 1 WAV files, which Phase 2 removes.
-- **Phase 2 needs `MODEL_API_KEY`** in `.env`. It is still empty.
-- **`.env` has `TIMEZONE=America/Austin`, which is invalid.** It should be `America/Chicago`. The bot won't start until this is fixed.
-- **Not yet confirmed against the real Muse API:** how strictly Muse enforces "real time"; whether partial transcripts arrive in `PUSH_TO_TALK` mode; real latency.
+- **Angel (Partner 3) hasn't registered yet**, so the recap can't @mention them. They need to click Join Orbit or run `/link-email` before the Phase 4 DMs.
+- **Display names in transcripts:** a speaker label is the person's Discord display name (e.g. "лс забанили"). For the demo, consider readable display names.
 - **Dev environment note:** Windows PowerShell 5.1 reads UTF-8 files without a BOM as ANSI. Edit files with Node or the editor, not `Get-Content`/`Set-Content`.
 - **Not in the docs:** realtime handshake field names for `ENDPOINTING` settings. We don't need them; we use `PUSH_TO_TALK` per utterance.

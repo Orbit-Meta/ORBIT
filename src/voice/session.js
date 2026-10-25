@@ -3,13 +3,16 @@ import { entersState, joinVoiceChannel, VoiceConnectionStatus } from '@discordjs
 import { config } from '../config.js';
 import { startCapture } from './capture.js';
 import { createTranscriberSink } from './transcriber.js';
+import { createLiveNotes } from './liveNotes.js';
 import { Transcript } from './transcript.js';
 import { stateNotice } from '../discord/format.js';
+import { postRecap } from '../discord/recap.js';
 import { listPeople } from '../store/people.js';
 import { bus } from '../dashboard/bus.js';
 
-// One listening session per server. State: 'listening' | 'paused'.
+// One listening session per server. State: 'listening' | 'paused' | 'ended'.
 const sessions = new Map();
+const lastEnded = new Map(); // guildId -> most recent ended session, so /recap works after /stop
 
 class Session {
   constructor({ guild, voiceChannel, connection }) {
@@ -21,6 +24,25 @@ class Session {
     this.transcript = new Transcript(this.startedAt);
     this.failedUtterances = 0;
     this.stats = new Map(); // userId -> { packets, decodeErrors, streamErrors }
+    this.participantIds = new Set(voiceChannel.members.filter((m) => !m.user.bot).map((m) => m.id));
+    this.recappedLines = 0;
+    this.summary = null; // latest recap from Muse Spark
+    this.liveNotes = createLiveNotes(this);
+  }
+
+  /** Called by the transcriber for every new final line. */
+  onTranscriptLine(entry) {
+    this.participantIds.add(entry.userId);
+    this.liveNotes.onLine();
+  }
+
+  participantNames() {
+    return [...this.participantIds].map((id) => this.nameOf(id));
+  }
+
+  /** Registered crew members who were never in this call: they get the recap ping (and DMs in Phase 4). */
+  absentCrew() {
+    return listPeople().filter((p) => !this.participantIds.has(p.id));
   }
 
   /** Words Muse Voice Transcribe should listen for: everyone's names, plus our wake words. */
@@ -56,6 +78,11 @@ class Session {
 
 export function getSession(guildId) {
   return sessions.get(guildId) ?? null;
+}
+
+/** The active session, or the one that just ended. */
+export function getRecentSession(guildId) {
+  return sessions.get(guildId) ?? lastEnded.get(guildId) ?? null;
 }
 
 export async function startSession({ guild, voiceChannel }) {
@@ -137,12 +164,15 @@ export async function endSession(guildId) {
   const s = sessions.get(guildId);
   if (!s) return null;
   sessions.delete(guildId);
+  s.endedAt = new Date();
   s.stopCapture();
   if (s.connection.state.status !== VoiceConnectionStatus.Destroyed) s.connection.destroy();
   await s.sink.drain();
+  s.liveNotes.stop();
   s.transcript.save();
   s.state = 'ended';
   s.publish();
+  lastEnded.set(guildId, s);
   return s;
 }
 
@@ -153,6 +183,7 @@ export async function onVoiceStateUpdate(oldState, newState) {
   const channelId = s.voiceChannel.id;
 
   if (newState.channelId === channelId && oldState.channelId !== channelId) {
+    s.participantIds.add(newState.id);
     await s.voiceChannel
       .send({
         content: `<@${newState.id}>`,
@@ -165,9 +196,16 @@ export async function onVoiceStateUpdate(oldState, newState) {
     const humansLeft = s.voiceChannel.members.filter((m) => !m.user.bot).size;
     if (humansLeft === 0) {
       await endSession(newState.guild.id);
-      await s.voiceChannel
-        .send({ embeds: [stateNotice('👋', 'Everyone left, so I stopped listening and left the call.')] })
-        .catch(() => {});
+      let note = 'Everyone left, so I stopped listening and left the call.';
+      if (s.transcript.entries.length > s.recappedLines) {
+        await postRecap(s)
+          .then((r) => r && (note += ` Recap posted in <#${r.channel.id}>.`))
+          .catch((err) => {
+            console.error('[recap] failed after call ended:', err.message);
+            note += ' ⚠️ I couldn\'t post the recap. Try `/recap`.';
+          });
+      }
+      await s.voiceChannel.send({ embeds: [stateNotice('👋', note)] }).catch(() => {});
     }
   }
 }

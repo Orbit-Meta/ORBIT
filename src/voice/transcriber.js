@@ -47,6 +47,7 @@ export function createTranscriberSink(session) {
     const entry = session.transcript.add({ userId: u.userId, speaker: u.speaker, startedAt: u.startedAt, endedAt, text });
     console.log(`[transcript] ${u.speaker}: ${text}`);
     bus.emit('final', entry);
+    session.onTranscriptLine?.(entry);
   }
 
   return {

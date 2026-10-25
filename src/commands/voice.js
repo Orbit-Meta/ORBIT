@@ -1,7 +1,8 @@
 import path from 'node:path';
 import { MessageFlags, PermissionFlagsBits } from 'discord.js';
 import { requireEnv } from '../config.js';
-import { endSession, getSession, pauseSession, resumeSession, startSession } from '../voice/session.js';
+import { endSession, getRecentSession, getSession, pauseSession, resumeSession, startSession } from '../voice/session.js';
+import { postRecap } from '../discord/recap.js';
 import { listeningNotice, stateNotice } from '../discord/format.js';
 
 const ephemeral = (content) => ({ content, flags: MessageFlags.Ephemeral });
@@ -64,10 +65,31 @@ export async function stop(interaction) {
   const n = s.transcript.entries.length;
   lines.push('', n ? `📝 Transcript: ${n} line${n === 1 ? '' : 's'} saved to \`${path.relative(process.cwd(), s.transcript.txtFile)}\`` : '📝 Nothing was transcribed.');
   if (s.failedUtterances) lines.push(`⚠️ ${s.failedUtterances} utterance(s) couldn't be transcribed (see the bot console).`);
+
+  // The call is over: post the recap unless /recap already covered every line.
+  if (n > s.recappedLines) {
+    await interaction.editReply({ embeds: [stateNotice('⏹️', [...lines, '🧠 Muse Spark is writing the recap…'].join('\n'))] });
+    try {
+      const r = await postRecap(s);
+      lines.push(`🧠 Recap posted in <#${r.channel.id}>.`);
+    } catch (err) {
+      console.error('[recap] failed:', err);
+      lines.push(`⚠️ Muse Spark couldn't write the recap (${err.message}). Try \`/recap\`.`);
+    }
+  }
   return interaction.editReply({ embeds: [stateNotice('⏹️', lines.join('\n'))] });
 }
 
 export async function recap(interaction) {
-  // Stub: Muse Spark summaries are built in Phase 3.
-  return interaction.reply(ephemeral('📝 Recaps arrive in Phase 3 (Muse Spark is not wired up yet).'));
+  const s = getRecentSession(interaction.guildId);
+  if (!s?.transcript.entries.length) return interaction.reply(ephemeral('Nothing to recap yet: no one has said anything since `/join`.'));
+  await interaction.deferReply();
+  try {
+    const r = await postRecap(s);
+    const where = r.channel.id === interaction.channelId ? 'above' : `in <#${r.channel.id}>`;
+    return interaction.editReply(`🧠 Muse Spark summarized ${s.state === 'ended' ? 'the call' : 'the call so far'}. Recap posted ${where}.`);
+  } catch (err) {
+    console.error('[recap] failed:', err);
+    return interaction.editReply(`⚠️ Muse Spark couldn't write the recap: ${err.message}`);
+  }
 }

@@ -4,7 +4,7 @@
 //
 //   transcribe()      Muse Voice Transcribe, realtime WebSocket (live, per utterance)
 //   transcribeFile()  Muse Voice Transcribe, file upload (fallback + demo mode)
-//   reason()          Muse Spark (added in Phase 3)
+//   reason()          Muse Spark, Responses API (structured JSON + live reasoning summary)
 // ─────────────────────────────────────────────────────────────────────────────
 import { config, requireEnv } from '../config.js';
 import { bus } from '../dashboard/bus.js';
@@ -199,5 +199,116 @@ export async function transcribeFile(wav, { keywords = [], languageBias = DEFAUL
   } catch (err) {
     logCall({ tool: 'Muse Voice Transcribe', endpoint: 'file', ok: false, ms: Date.now() - started, note: err.message });
     throw err;
+  }
+}
+
+/**
+ * Muse Spark via the Responses API (POST /responses), streamed.
+ *
+ *   const { data } = await reason({
+ *     task: 'call recap',                 // label for the live screen's activity log
+ *     instructions, input,                // developer instructions + user content
+ *     schema, schemaName,                 // JSON Schema → output is guaranteed to match
+ *     effort: 'low',                      // minimal | low | medium | high | xhigh | max
+ *     onReasoning: (summarySoFar) => {},  // Spark's reasoning summary as it streams
+ *   });
+ *
+ * store: false — Meta doesn't keep these responses (private constraints pass through here later).
+ */
+export async function reason({ task, instructions, input, schema, schemaName, effort = 'low', onReasoning, maxOutputTokens = 8000, timeoutMs = 90_000 }) {
+  requireEnv('MODEL_API_KEY');
+  const started = Date.now();
+  let reasoning = '';
+  let text = '';
+  let response = null;
+
+  try {
+    const res = await fetch(`${config.muse.baseUrl}/responses`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.muse.apiKey}`,
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+      },
+      body: JSON.stringify({
+        model: config.muse.sparkModel,
+        instructions,
+        input,
+        text: { format: { type: 'json_schema', name: schemaName, schema, strict: true } },
+        reasoning: { effort, summary: 'auto' },
+        max_output_tokens: maxOutputTokens,
+        store: false,
+        stream: true,
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!res.ok) throw new Error(`Muse Spark HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+
+    for await (const event of readServerSentEvents(res.body)) {
+      switch (event.type) {
+        case 'response.reasoning_summary_text.delta':
+          reasoning += event.delta;
+          onReasoning?.(reasoning);
+          break;
+        case 'response.reasoning_summary_part.added':
+          if (reasoning) reasoning += '\n\n';
+          break;
+        case 'response.output_text.delta':
+          text += event.delta;
+          break;
+        case 'response.completed':
+        case 'response.incomplete':
+        case 'response.failed':
+          response = event.response;
+          break;
+        case 'error':
+          throw new Error(`Muse Spark: ${event.message}`);
+      }
+    }
+
+    if (!response) throw new Error('Muse Spark stream ended without a final response');
+    if (response.status !== 'completed') {
+      const why = response.error?.message ?? response.incomplete_details?.reason ?? response.status;
+      throw new Error(`Muse Spark response ${response.status}: ${why}`);
+    }
+    const finalText =
+      response.output_text ??
+      response.output?.filter((o) => o.type === 'message').flatMap((o) => o.content).find((c) => c.type === 'output_text')?.text ??
+      text;
+    const data = JSON.parse(finalText);
+
+    const usage = response.usage ?? {};
+    logCall({
+      tool: 'Muse Spark',
+      endpoint: task,
+      ok: true,
+      ms: Date.now() - started,
+      sessionId: response.id,
+      note: `${usage.input_tokens ?? '?'} in · ${usage.output_tokens ?? '?'} out tokens (${usage.output_tokens_details?.reasoning_tokens ?? 0} reasoning) · effort ${effort}`,
+    });
+    return { data, reasoning, usage, responseId: response.id };
+  } catch (err) {
+    logCall({ tool: 'Muse Spark', endpoint: task, ok: false, ms: Date.now() - started, note: err.message });
+    throw err;
+  }
+}
+
+/** Parse a text/event-stream body into JSON event objects. */
+async function* readServerSentEvents(body) {
+  const decoder = new TextDecoder();
+  let buffer = '';
+  for await (const chunk of body) {
+    buffer += decoder.decode(chunk, { stream: true });
+    let boundary;
+    while ((boundary = buffer.search(/\r?\n\r?\n/)) !== -1) {
+      const block = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary).replace(/^\r?\n\r?\n/, '');
+      const data = block
+        .split(/\r?\n/)
+        .filter((l) => l.startsWith('data:'))
+        .map((l) => l.slice(5).trimStart())
+        .join('\n');
+      if (data && data !== '[DONE]') yield JSON.parse(data);
+    }
   }
 }
