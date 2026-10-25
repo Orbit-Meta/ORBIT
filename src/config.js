@@ -15,6 +15,17 @@ export function requireEnv(...names) {
   }
 }
 
+function validTimezone(tz) {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz });
+    return tz;
+  } catch {
+    throw new Error(
+      `TIMEZONE=${tz} in .env is not a valid IANA time zone. Use one like America/New_York, America/Chicago, America/Denver, or America/Los_Angeles.`,
+    );
+  }
+}
+
 export const config = {
   discord: {
     token: env('DISCORD_TOKEN'),
@@ -34,7 +45,7 @@ export const config = {
     calendarId: env('GOOGLE_CALENDAR_ID', 'primary'),
     refreshToken: env('GOOGLE_REFRESH_TOKEN'),
   },
-  timezone: env('TIMEZONE', 'America/New_York'),
+  timezone: validTimezone(env('TIMEZONE', 'America/New_York')),
   defaultArea: env('DEFAULT_AREA', 'Downtown'),
   dmEveryone: env('DM_EVERYONE', 'true') === 'true',
   dashboardPort: Number(env('DASHBOARD_PORT', '3000')),

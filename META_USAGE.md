@@ -14,7 +14,8 @@ All Meta AI calls go through one module: `src/meta/muse.js`. Nothing else in the
 
 | # | Meta tool | Where (file → function) | What it does | Status |
 |---|---|---|---|---|
-| 1 | Muse Voice Transcribe | `src/voice/capture.js` → `transcribe()` | Transcribes each speaker's audio; the results become the speaker-labeled transcript | Planned (Phase 2) |
+| 1 | Muse Voice Transcribe (realtime) | `src/voice/transcriber.js` → `begin()` calls `transcribe()` | Opens one live session per utterance, per Discord speaker, and streams the audio. Partial text goes to the live screen; the final text becomes a speaker-labeled transcript line. Name keywords plus "Meta"/"Orbit" improve recognition. | Built (Phase 2) |
+| 1b | Muse Voice Transcribe (file) | `src/voice/transcriber.js` → `finish()` calls `transcribeFile()` | Fallback: if a realtime stream fails, the same utterance (kept in memory) is uploaded as a WAV | Built (Phase 2) |
 | 2 | Muse Spark | `src/core/liveInsights.js` → `reason()` | Updates availability, options, and open questions on the live screen as the call goes on | Planned (Phase 3) |
 | 3 | Muse Spark | `src/core/summarizeCall.js` → `reason()` | Builds the end-of-call summary JSON (availability, options, open questions, decisions) | Planned (Phase 3) |
 | 4 | Muse Spark | `src/core/askQuestions.js` → `reason()` | On "Any questions, Meta?", finds only the gaps the call hasn't covered (diet, unresolved times) and writes short questions | Planned (Phase 3b) |
@@ -31,3 +32,4 @@ Non-Meta AI services used: **none**.
 
 ## Log by phase
 - **Phase 1:** no AI calls. The voice receive test saves raw audio to local WAV files only.
+- **Phase 2:** Muse Voice Transcribe, realtime with file-upload fallback. Every call is shown in the live screen's "Meta AI activity" panel, with latency and Muse session ID.

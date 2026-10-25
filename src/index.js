@@ -3,9 +3,12 @@ import { generateDependencyReport } from '@discordjs/voice';
 import { config, requireEnv } from './config.js';
 import { commandDefinitions, handleInteraction } from './commands/index.js';
 import { onVoiceStateUpdate } from './voice/session.js';
+import { startDashboard } from './dashboard/server.js';
 
 requireEnv('DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_GUILD_ID');
+if (!config.muse.apiKey) console.warn('[orbit] MODEL_API_KEY is empty: /join will refuse to start until it is set.');
 if (config.voiceDebug) console.log(generateDependencyReport());
+startDashboard(config.dashboardPort);
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],

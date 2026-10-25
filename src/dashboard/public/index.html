@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orbit Live</title>
+<style>
+  :root {
+    --bg: #0b0d12;
+    --panel: #12151c;
+    --panel-2: #181c25;
+    --line: #232836;
+    --text: #e8ebf2;
+    --muted: #8b93a7;
+    --faint: #5b6377;
+    --meta: #0866ff;
+    --meta-soft: rgba(8, 102, 255, 0.14);
+    --ok: #31c48d;
+    --warn: #f5a524;
+    --err: #f26d6d;
+    --s1: #5aa9ff; --s2: #ff8fb1; --s3: #ffd166; --s4: #7ee0b5; --s5: #c4a1ff; --s6: #ffad7a;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex; flex-direction: column;
+  }
+
+  header {
+    display: flex; align-items: center; gap: 16px;
+    padding: 16px 24px; border-bottom: 1px solid var(--line);
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand h1 { margin: 0; font-size: 20px; letter-spacing: 0.2px; }
+  .brand span { color: var(--muted); font-size: 14px; }
+  .spacer { flex: 1; }
+  .meta-tag { color: var(--muted); font-size: 13px; }
+  .meta-tag b { color: var(--text); font-weight: 600; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 12px; border-radius: 999px; font-size: 14px; font-weight: 600;
+    background: var(--panel-2); color: var(--muted); border: 1px solid var(--line);
+  }
+  .pill .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .pill.listening { color: var(--ok); border-color: rgba(49, 196, 141, 0.35); }
+  .pill.listening .dot { animation: pulse 1.4s ease-in-out infinite; }
+  .pill.paused { color: var(--warn); border-color: rgba(245, 165, 36, 0.35); }
+  @keyframes pulse { 50% { opacity: 0.25; } }
+  #elapsed { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 14px; min-width: 48px; }
+
+  main {
+    flex: 1; min-height: 0;
+    display: grid; grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
+    gap: 20px; padding: 20px 24px;
+  }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    display: flex; flex-direction: column; min-height: 0;
+  }
+  .card > h2 {
+    margin: 0; padding: 14px 18px; font-size: 13px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted);
+    border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px;
+  }
+  .card > h2 .count { margin-left: auto; color: var(--faint); text-transform: none; letter-spacing: 0; font-weight: 500; }
+  .scroll { overflow-y: auto; flex: 1; padding: 8px 18px 18px; }
+
+  .empty { color: var(--faint); text-align: center; padding: 48px 12px; }
+  .empty code { background: var(--panel-2); padding: 2px 6px; border-radius: 6px; color: var(--muted); }
+
+  .line { display: grid; grid-template-columns: 36px 1fr; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .line:last-child { border-bottom: 0; }
+  .avatar {
+    width: 36px; height: 36px; border-radius: 50%;
+    display: grid; place-items: center; font-weight: 700; font-size: 15px; color: #0b0d12;
+  }
+  .who { display: flex; align-items: baseline; gap: 8px; }
+  .who b { font-size: 15px; }
+  .who time { color: var(--faint); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .text { font-size: 19px; line-height: 1.45; margin-top: 2px; overflow-wrap: anywhere; }
+  .line.partial .text { color: var(--muted); }
+  .speaking { display: inline-flex; gap: 3px; margin-left: 6px; vertical-align: middle; }
+  .speaking i { width: 5px; height: 5px; border-radius: 50%; background: var(--muted); animation: bounce 1s infinite; }
+  .speaking i:nth-child(2) { animation-delay: 0.15s; }
+  .speaking i:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes bounce { 50% { transform: translateY(-4px); opacity: 0.4; } }
+
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 14px 18px 4px; }
+  .stat { background: var(--panel-2); border-radius: 10px; padding: 10px 12px; }
+  .stat .n { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stat .l { color: var(--muted); font-size: 12px; }
+
+  .call { padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+  .call:last-child { border-bottom: 0; }
+  .call .top { display: flex; align-items: center; gap: 8px; }
+  .badge {
+    font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 6px;
+    background: var(--meta-soft); color: #7fb0ff;
+  }
+  .call .ms { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .call .sub { color: var(--faint); font-size: 12px; margin-top: 3px; overflow-wrap: anywhere; }
+  .call.fail .badge { background: rgba(242, 109, 109, 0.14); color: var(--err); }
+  .call.fail .sub { color: var(--err); }
+
+  footer {
+    padding: 10px 24px; border-top: 1px solid var(--line);
+    color: var(--faint); font-size: 13px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+  }
+  footer b { color: var(--muted); font-weight: 600; }
+  .conn { margin-left: auto; }
+  .conn.off { color: var(--err); }
+
+  @media (max-width: 860px) {
+    main { grid-template-columns: 1fr; padding: 16px; }
+    header { padding: 12px 16px; flex-wrap: wrap; }
+    .meta-tag { display: none; }
+    footer { padding: 10px 16px; }
+    .text { font-size: 17px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true">
+      <circle cx="17" cy="17" r="6" fill="#0866ff"/>
+      <ellipse cx="17" cy="17" rx="15" ry="6.5" fill="none" stroke="#7fb0ff" stroke-width="2" transform="rotate(-25 17 17)"/>
+    </svg>
+    <div>
+      <h1>Orbit</h1>
+      <span id="channel">Live call notes</span>
+    </div>
+  </div>
+  <div class="spacer"></div>
+  <div class="meta-tag">AI by <b>Meta</b></div>
+  <span id="elapsed"></span>
+  <span id="status" class="pill"><span class="dot"></span><span id="status-text">Idle</span></span>
+</header>
+
+<main>
+  <section class="card">
+    <h2>Live transcript <span class="count" id="line-count"></span></h2>
+    <div class="scroll" id="transcript">
+      <div class="empty" id="transcript-empty">Waiting for a call. Type <code>/join</code> in Discord.</div>
+      <div id="finals"></div>
+      <div id="partials"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Meta AI activity</h2>
+    <div class="stats">
+      <div class="stat"><div class="n" id="stat-calls">0</div><div class="l">Muse calls</div></div>
+      <div class="stat"><div class="n" id="stat-latency">–</div><div class="l">avg. final-text latency</div></div>
+    </div>
+    <div class="scroll" id="muse">
+      <div class="empty" id="muse-empty">No Muse calls yet.</div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <span><b>Muse Voice Transcribe</b> hears who said what</span>·
+  <span><b>Muse Spark</b> plans</span>·
+  <span><b>MMS-TTS</b> speaks</span>
+  <span class="conn" id="conn">connecting…</span>
+</footer>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const colors = ['--s1', '--s2', '--s3', '--s4', '--s5', '--s6'];
+  const speakerColor = new Map();
+  let sessionStart = null;
+  let lineCount = 0;
+  let calls = 0, latencyTotal = 0, latencyN = 0;
+
+  function colorFor(userId) {
+    if (!speakerColor.has(userId)) speakerColor.set(userId, `var(${colors[speakerColor.size % colors.length]})`);
+    return speakerColor.get(userId);
+  }
+  function fmtTime(iso) {
+    return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+  function nearBottom(el) { return el.scrollHeight - el.scrollTop - el.clientHeight < 80; }
+  function keepPinned(el, fn) { const pin = nearBottom(el); fn(); if (pin) el.scrollTop = el.scrollHeight; }
+
+  function lineEl({ userId, speaker, text, startedAt }, partial) {
+    const row = document.createElement('div');
+    row.className = 'line' + (partial ? ' partial' : '');
+    const av = document.createElement('div');
+    av.className = 'avatar';
+    av.style.background = colorFor(userId);
+    av.textContent = ([...(speaker || '?')][0] || '?').toUpperCase();
+    const body = document.createElement('div');
+    const who = document.createElement('div');
+    who.className = 'who';
+    const name = document.createElement('b');
+    name.textContent = speaker;
+    name.style.color = colorFor(userId);
+    who.append(name);
+    if (partial) {
+      const dots = document.createElement('span');
+      dots.className = 'speaking';
+      dots.innerHTML = '<i></i><i></i><i></i>';
+      who.append(dots);
+    } else {
+      const t = document.createElement('time');
+      t.textContent = fmtTime(startedAt);
+      who.append(t);
+    }
+    const tx = document.createElement('div');
+    tx.className = 'text';
+    tx.textContent = text;
+    body.append(who, tx);
+    row.append(av, body);
+    return row;
+  }
+
+  function refreshEmpty() {
+    $('transcript-empty').style.display = lineCount || $('partials').children.length ? 'none' : '';
+    $('line-count').textContent = lineCount ? `${lineCount} line${lineCount === 1 ? '' : 's'}` : '';
+  }
+
+  function addFinal(entry) {
+    keepPinned($('transcript'), () => {
+      $('partials').querySelector(`[data-user="${CSS.escape(entry.userId)}"]`)?.remove();
+      $('finals').append(lineEl(entry, false));
+      lineCount++;
+      refreshEmpty();
+    });
+  }
+  function setPartial(p) {
+    keepPinned($('transcript'), () => {
+      const row = lineEl(p, true);
+      row.dataset.user = p.userId;
+      const old = $('partials').querySelector(`[data-user="${CSS.escape(p.userId)}"]`);
+      old ? old.replaceWith(row) : $('partials').append(row);
+      refreshEmpty();
+    });
+  }
+  function clearPartial({ userId }) {
+    $('partials').querySelector(`[data-user="${CSS.escape(userId)}"]`)?.remove();
+    refreshEmpty();
+  }
+
+  function addMuse(c) {
+    calls++;
+    if (c.ok && typeof c.ms === 'number') { latencyTotal += c.ms; latencyN++; }
+    $('stat-calls').textContent = calls;
+    $('stat-latency').textContent = latencyN ? `${Math.round(latencyTotal / latencyN)} ms` : '–';
+    $('muse-empty').style.display = 'none';
+    const row = document.createElement('div');
+    row.className = 'call' + (c.ok ? '' : ' fail');
+    const top = document.createElement('div');
+    top.className = 'top';
+    const badge = document.createElement('span');
+    badge.className = 'badge';
+    badge.textContent = c.tool;
+    const ep = document.createElement('span');
+    ep.style.color = 'var(--muted)';
+    ep.textContent = c.endpoint;
+    const ms = document.createElement('span');
+    ms.className = 'ms';
+    ms.textContent = typeof c.ms === 'number' ? `${c.ms} ms` : '';
+    top.append(badge, ep, ms);
+    const sub = document.createElement('div');
+    sub.className = 'sub';
+    sub.textContent = `${fmtTime(new Date(c.at).toISOString())} · ${c.ok ? '✓' : '✕'} ${c.note || ''}`;
+    row.append(top, sub);
+    $('muse').insertBefore(row, $('muse-empty').nextSibling);
+  }
+
+  function setSession(s) {
+    const pill = $('status');
+    pill.className = 'pill ' + (s?.state || '');
+    const label = { listening: 'Listening', paused: 'Paused', ended: 'Call ended' }[s?.state] || 'Idle';
+    $('status-text').textContent = label;
+    $('channel').textContent = s?.channel ? `🔊 ${s.channel}` : 'Live call notes';
+    sessionStart = s && s.state !== 'ended' ? new Date(s.startedAt) : null;
+    tick();
+  }
+  function resetTranscript() {
+    $('finals').replaceChildren();
+    $('partials').replaceChildren();
+    lineCount = 0;
+    speakerColor.clear();
+    refreshEmpty();
+  }
+  function tick() {
+    if (!sessionStart) { $('elapsed').textContent = ''; return; }
+    const s = Math.max(0, Math.floor((Date.now() - sessionStart) / 1000));
+    $('elapsed').textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  }
+  setInterval(tick, 1000);
+
+  const es = new EventSource('/events');
+  es.onopen = () => { $('conn').textContent = '● live'; $('conn').className = 'conn'; };
+  es.onerror = () => { $('conn').textContent = 'reconnecting…'; $('conn').className = 'conn off'; };
+  es.addEventListener('snapshot', (e) => {
+    const snap = JSON.parse(e.data);
+    resetTranscript();
+    $('muse').querySelectorAll('.call').forEach((n) => n.remove());
+    calls = 0; latencyTotal = 0; latencyN = 0;
+    $('muse-empty').style.display = '';
+    setSession(snap.session);
+    snap.finals.forEach(addFinal);
+    Object.values(snap.partials).forEach(setPartial);
+    snap.muse.forEach(addMuse);
+  });
+  es.addEventListener('session', (e) => {
+    const s = JSON.parse(e.data);
+    if (s.state === 'listening' && (!sessionStart || sessionStart.toISOString() !== s.startedAt)) resetTranscript();
+    setSession(s);
+  });
+  es.addEventListener('partial', (e) => setPartial(JSON.parse(e.data)));
+  es.addEventListener('partial-clear', (e) => clearPartial(JSON.parse(e.data)));
+  es.addEventListener('final', (e) => addFinal(JSON.parse(e.data)));
+  es.addEventListener('muse', (e) => addMuse(JSON.parse(e.data)));
+</script>
+</body>
+</html>

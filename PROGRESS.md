@@ -4,7 +4,7 @@
 |---|---|
 | 0. Plan & verify | ✅ Done |
 | 1. Bot skeleton + **voice receive spike** + crew self-registration | ✅ Done; verified live by Sasha |
-| 2. Voice capture + Muse Voice Transcribe + live screen (transcript) | ⏳ Not started |
+| 2. Voice capture + Muse Voice Transcribe + live screen (transcript) | 🧪 Code complete and tested against a protocol test double; waiting for `MODEL_API_KEY` and a live test |
 | 3. Muse Spark summary + live screen (rolling insights, reasoning) | ⏳ Not started |
 | 3b. "Any questions, Meta?" spoken gap questions | ⏳ Not started |
 | 4. Private constraints + plan resolution | ⏳ Not started |
@@ -50,6 +50,32 @@
 - **Voice debugging:** set `ORBIT_VOICE_DEBUG=1` in `.env` for detailed voice and DAVE logs.
 - **Storage:** JSON files under `data/` (gitignored). Private constraints are kept in a separate file.
 
+### Phase 2 decisions
+- **One Muse realtime session per utterance**, in `PUSH_TO_TALK` mode.
+  - An utterance ends after 800 ms of silence.
+  - Anything under 300 ms (a cough or click) is dropped without calling Muse.
+  - We don't pay for silence between turns, and each line gets a clean speaker label.
+- **Pacing:** audio is sent every 80 ms and kept within 240 ms of real time. Silence padding happens only beyond that, during pauses or packet loss. The tolerance is the `LAG_TOLERANCE_BYTES` constant in `src/meta/muse.js`.
+- **Fallback:** each utterance's audio stays in memory until it's transcribed. If the realtime stream fails, it's retried through Muse's file-upload endpoint.
+- **Recognition hints:**
+  - `keywords` = display names in the call + crew names + "Meta" and "Orbit".
+  - `languageBias` = `["English"]`.
+- **Transcript files:** `data/transcripts/<ISO time>.json` and `.txt`, rewritten after every line and ordered by when each person started speaking.
+- **Live screen:** `http://localhost:3000`, built with `node:http` and Server-Sent Events, no new dependencies.
+  - It shows the live transcript with partial text and a "speaking" indicator, plus the Meta AI activity log (call count, average latency, each call).
+  - Bound to 127.0.0.1 only.
+- **WebSocket client:** Node 24's built-in `WebSocket`, so no `ws` dependency in the app.
+- **Config validation:** an invalid `TIMEZONE` now stops startup with a clear message. A failure while recording one transcript line can't crash the bot.
+
+### Phase 2 test results (protocol test double, no real Muse)
+- **Handshake:** exactly matches the documented `RealtimeHandshakeRequest`.
+- **Pacing:** stays within 240 ms of real time.
+- **`endStream`:** sent correctly, and the final transcript is received.
+- **Fallback:** realtime close code 1011 led to a file upload with valid multipart and WAV, and the transcript line was still recorded.
+- **Ordering:** two overlapping speakers came out in the correct order.
+- **Short sounds:** a 100 ms "cough" was dropped.
+- **Live screen:** the page is served, a new viewer gets the current state plus live events, and the page script parses.
+
 ## Verification log (2026-10-25)
 - **DAVE is mandatory:** Discord has enforced E2EE voice since March 2026.
 - **@discordjs/voice 0.19.2:** contains PR #11449, the probable DAVE receive fix. Not publicly confirmed; packet-loss issue #11441 was closed without a fix.
@@ -65,5 +91,7 @@
   - **Voice receive works with DAVE on @discordjs/voice 0.19.2** in a regular voice channel, so the Stage fallback wasn't needed.
 - **Minor:** a display name with no letters or digits turns into the filename `_`. This only affects the Phase 1 WAV files, which Phase 2 removes.
 - **Phase 2 needs `MODEL_API_KEY`** in `.env`. It is still empty.
+- **`.env` has `TIMEZONE=America/Austin`, which is invalid.** It should be `America/Chicago`. The bot won't start until this is fixed.
+- **Not yet confirmed against the real Muse API:** how strictly Muse enforces "real time"; whether partial transcripts arrive in `PUSH_TO_TALK` mode; real latency.
 - **Dev environment note:** Windows PowerShell 5.1 reads UTF-8 files without a BOM as ANSI. Edit files with Node or the editor, not `Get-Content`/`Set-Content`.
 - **Not in the docs:** realtime handshake field names for `ENDPOINTING` settings. We don't need them; we use `PUSH_TO_TALK` per utterance.

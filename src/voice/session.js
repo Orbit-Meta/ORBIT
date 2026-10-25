@@ -2,8 +2,11 @@ import { ChannelType } from 'discord.js';
 import { entersState, joinVoiceChannel, VoiceConnectionStatus } from '@discordjs/voice';
 import { config } from '../config.js';
 import { startCapture } from './capture.js';
-import { createSpikeSink } from './spike.js';
+import { createTranscriberSink } from './transcriber.js';
+import { Transcript } from './transcript.js';
 import { stateNotice } from '../discord/format.js';
+import { listPeople } from '../store/people.js';
+import { bus } from '../dashboard/bus.js';
 
 // One listening session per server. State: 'listening' | 'paused'.
 const sessions = new Map();
@@ -15,7 +18,22 @@ class Session {
     this.connection = connection;
     this.state = 'listening';
     this.startedAt = new Date();
+    this.transcript = new Transcript(this.startedAt);
+    this.failedUtterances = 0;
     this.stats = new Map(); // userId -> { packets, decodeErrors, streamErrors }
+  }
+
+  /** Words Muse Voice Transcribe should listen for: everyone's names, plus our wake words. */
+  keywords() {
+    const names = [
+      ...this.voiceChannel.members.filter((m) => !m.user.bot).map((m) => m.displayName),
+      ...listPeople().map((p) => p.name),
+    ];
+    return [...new Set([...names, 'Meta', 'Orbit'])];
+  }
+
+  publish() {
+    bus.emit('session', { state: this.state, channel: this.voiceChannel.name, startedAt: this.startedAt.toISOString() });
   }
 
   isBot(userId) {
@@ -76,9 +94,10 @@ export async function startSession({ guild, voiceChannel }) {
   }
 
   const session = new Session({ guild, voiceChannel, connection });
-  session.sink = createSpikeSink(session);
+  session.sink = createTranscriberSink(session);
   session.stopCapture = startCapture(session, session.sink);
   sessions.set(guild.id, session);
+  session.publish();
 
   // If Discord drops us, try to reconnect for 5s, otherwise end cleanly.
   connection.on(VoiceConnectionStatus.Disconnected, async () => {
@@ -88,7 +107,7 @@ export async function startSession({ guild, voiceChannel }) {
         entersState(connection, VoiceConnectionStatus.Connecting, 5_000),
       ]);
     } catch {
-      endSession(guild.id);
+      await endSession(guild.id);
     }
   });
 
@@ -97,25 +116,34 @@ export async function startSession({ guild, voiceChannel }) {
 
 export function pauseSession(guildId) {
   const s = sessions.get(guildId);
-  if (s) s.state = 'paused';
+  if (s) {
+    s.state = 'paused';
+    s.publish();
+  }
   return s;
 }
 
 export function resumeSession(guildId) {
   const s = sessions.get(guildId);
-  if (s) s.state = 'listening';
+  if (s) {
+    s.state = 'listening';
+    s.publish();
+  }
   return s;
 }
 
-/** Stops capture, leaves the call, and returns the receive-test results. */
-export function endSession(guildId) {
+/** Stops capture, leaves the call, waits for the last transcripts, and returns the session. */
+export async function endSession(guildId) {
   const s = sessions.get(guildId);
   if (!s) return null;
   sessions.delete(guildId);
   s.stopCapture();
-  const results = s.sink.flush();
   if (s.connection.state.status !== VoiceConnectionStatus.Destroyed) s.connection.destroy();
-  return { session: s, results };
+  await s.sink.drain();
+  s.transcript.save();
+  s.state = 'ended';
+  s.publish();
+  return s;
 }
 
 /** Consent: warn anyone who joins a call Orbit is listening to; leave when the humans are gone. */
@@ -136,7 +164,7 @@ export async function onVoiceStateUpdate(oldState, newState) {
   if (oldState.channelId === channelId && newState.channelId !== channelId) {
     const humansLeft = s.voiceChannel.members.filter((m) => !m.user.bot).size;
     if (humansLeft === 0) {
-      endSession(newState.guild.id);
+      await endSession(newState.guild.id);
       await s.voiceChannel
         .send({ embeds: [stateNotice('👋', 'Everyone left, so I stopped listening and left the call.')] })
         .catch(() => {});
