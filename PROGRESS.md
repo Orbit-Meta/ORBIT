@@ -3,7 +3,7 @@
 | Phase | Status |
 |---|---|
 | 0. Plan & verify | ✅ Done |
-| 1. Bot skeleton + **voice receive spike** + crew self-registration | 🧪 Code complete; waiting for your live test (bot needs to be invited) |
+| 1. Bot skeleton + **voice receive spike** + crew self-registration | ✅ Done; verified live by Sasha |
 | 2. Voice capture + Muse Voice Transcribe + live screen (transcript) | ⏳ Not started |
 | 3. Muse Spark summary + live screen (rolling insights, reasoning) | ⏳ Not started |
 | 3b. "Any questions, Meta?" spoken gap questions | ⏳ Not started |
@@ -61,6 +61,9 @@
   - limits: 256 concurrent streams and 16k streams/hour
 
 ## Open issues
-- **Phase 1 live test pending:** on 2026-10-25 the bot logged in successfully but had not been invited to any server yet.
+- **Phase 1 live test passed.** Sasha confirmed `/orbit-setup` and separate per-speaker audio streams both worked. Two speakers each produced a clean 10.0 s WAV.
+  - **Voice receive works with DAVE on @discordjs/voice 0.19.2** in a regular voice channel, so the Stage fallback wasn't needed.
+- **Minor:** a display name with no letters or digits turns into the filename `_`. This only affects the Phase 1 WAV files, which Phase 2 removes.
+- **Phase 2 needs `MODEL_API_KEY`** in `.env`. It is still empty.
 - **Dev environment note:** Windows PowerShell 5.1 reads UTF-8 files without a BOM as ANSI. Edit files with Node or the editor, not `Get-Content`/`Set-Content`.
 - **Not in the docs:** realtime handshake field names for `ENDPOINTING` settings. We don't need them; we use `PUSH_TO_TALK` per utterance.
