@@ -3,6 +3,7 @@ import { MessageFlags, PermissionFlagsBits } from 'discord.js';
 import { requireEnv } from '../config.js';
 import { endSession, getRecentSession, getSession, pauseSession, resumeSession, startSession } from '../voice/session.js';
 import { postRecap } from '../discord/recap.js';
+import { answerQuestions } from '../voice/askMeta.js';
 import { listeningNotice, stateNotice } from '../discord/format.js';
 
 const ephemeral = (content) => ({ content, flags: MessageFlags.Ephemeral });
@@ -78,6 +79,21 @@ export async function stop(interaction) {
     }
   }
   return interaction.editReply({ embeds: [stateNotice('⏹️', lines.join('\n'))] });
+}
+
+/** Same as saying "Any questions, Meta?" in the call. */
+export async function questions(interaction) {
+  const s = getSession(interaction.guildId);
+  if (!s) return interaction.reply(ephemeral("I'm not in a call right now. Use `/join`."));
+  if (!s.transcript.entries.length) return interaction.reply(ephemeral('Talk a little first, then ask me.'));
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  try {
+    const r = await answerQuestions(s, { by: interaction.member.displayName });
+    return interaction.editReply(r ? `🎙️ Asked in 🔊 **${s.voiceChannel.name}**.` : "I'm already answering. Give me a second.");
+  } catch (err) {
+    console.error('[questions] failed:', err);
+    return interaction.editReply(`⚠️ Muse Spark couldn't come up with questions: ${err.message}`);
+  }
 }
 
 export async function recap(interaction) {

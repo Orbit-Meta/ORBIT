@@ -83,6 +83,8 @@
   .who time { color: var(--faint); font-size: 12px; font-variant-numeric: tabular-nums; }
   .text { font-size: 19px; line-height: 1.45; margin-top: 2px; overflow-wrap: anywhere; }
   .line.partial .text { color: var(--muted); }
+  .line.orbit { background: var(--meta-soft); border-radius: 10px; padding: 12px; margin: 6px -12px; border-bottom: 0; }
+  .line.orbit .who b::after { content: ' · spoke in the call with Meta MMS-TTS'; color: var(--faint); font-weight: 400; font-size: 12px; }
   .speaking { display: inline-flex; gap: 3px; margin-left: 6px; vertical-align: middle; }
   .speaking i { width: 5px; height: 5px; border-radius: 50%; background: var(--muted); animation: bounce 1s infinite; }
   .speaking i:nth-child(2) { animation-delay: 0.15s; }
@@ -227,6 +229,7 @@
   let calls = 0, latencyTotal = 0, latencyN = 0;
 
   function colorFor(userId) {
+    if (userId === 'orbit') return '#7fb0ff';
     if (!speakerColor.has(userId)) speakerColor.set(userId, `var(${colors[speakerColor.size % colors.length]})`);
     return speakerColor.get(userId);
   }
@@ -238,11 +241,11 @@
 
   function lineEl({ userId, speaker, text, startedAt }, partial) {
     const row = document.createElement('div');
-    row.className = 'line' + (partial ? ' partial' : '');
+    row.className = 'line' + (partial ? ' partial' : '') + (userId === 'orbit' ? ' orbit' : '');
     const av = document.createElement('div');
     av.className = 'avatar';
     av.style.background = colorFor(userId);
-    av.textContent = ([...(speaker || '?')][0] || '?').toUpperCase();
+    av.textContent = userId === 'orbit' ? '🪐' : ([...(speaker || '?')][0] || '?').toUpperCase();
     const body = document.createElement('div');
     const who = document.createElement('div');
     who.className = 'who';

@@ -1,5 +1,6 @@
 import { ChannelType } from 'discord.js';
-import { entersState, joinVoiceChannel, VoiceConnectionStatus } from '@discordjs/voice';
+import { createAudioPlayer, entersState, joinVoiceChannel, NoSubscriberBehavior, VoiceConnectionStatus } from '@discordjs/voice';
+import { answerQuestions, isWakePhrase } from './askMeta.js';
 import { config } from '../config.js';
 import { startCapture } from './capture.js';
 import { createTranscriberSink } from './transcriber.js';
@@ -34,6 +35,10 @@ class Session {
   onTranscriptLine(entry) {
     this.participantIds.add(entry.userId);
     this.liveNotes.onLine();
+    if (isWakePhrase(entry.text)) {
+      console.log(`[questions] wake phrase from ${entry.speaker}: "${entry.text}"`);
+      answerQuestions(this, { by: entry.speaker, fromVoice: true }).catch((err) => console.error('[questions] failed:', err.message));
+    }
   }
 
   participantNames() {
@@ -121,6 +126,9 @@ export async function startSession({ guild, voiceChannel }) {
   }
 
   const session = new Session({ guild, voiceChannel, connection });
+  session.player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
+  session.player.on('error', (err) => console.error('[voice] playback error:', err.message));
+  connection.subscribe(session.player);
   session.sink = createTranscriberSink(session);
   session.stopCapture = startCapture(session, session.sink);
   sessions.set(guild.id, session);
@@ -166,6 +174,7 @@ export async function endSession(guildId) {
   sessions.delete(guildId);
   s.endedAt = new Date();
   s.stopCapture();
+  s.player.stop(true);
   if (s.connection.state.status !== VoiceConnectionStatus.Destroyed) s.connection.destroy();
   await s.sink.drain();
   s.liveNotes.stop();

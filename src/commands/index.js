@@ -8,6 +8,7 @@ const commands = [
   { name: 'resume', description: 'Resume Orbit after a pause', run: voice.resume },
   { name: 'stop', description: 'Orbit stops listening and leaves the call', run: voice.stop },
   { name: 'recap', description: 'Summarize the call so far', run: voice.recap },
+  { name: 'questions', description: 'Orbit asks what the plan is still missing (same as saying "Any questions, Meta?")', run: voice.questions },
   { name: 'orbit-setup', description: 'Post a "Join Orbit" button so people can link their email', run: crew.orbitSetup },
   { name: 'link-email', description: 'Link (or change) the email Orbit sends your calendar invites to', run: crew.showLinkModal },
   { name: 'unlink', description: 'Leave the Orbit crew and delete your email', run: crew.unlink },

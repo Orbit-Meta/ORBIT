@@ -4,11 +4,14 @@ import { config, requireEnv } from './config.js';
 import { commandDefinitions, handleInteraction } from './commands/index.js';
 import { onVoiceStateUpdate } from './voice/session.js';
 import { startDashboard } from './dashboard/server.js';
+import { warmUpTts } from './meta/tts.js';
 
 requireEnv('DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_GUILD_ID');
 if (!config.muse.apiKey) console.warn('[orbit] MODEL_API_KEY is empty: /join will refuse to start until it is set.');
 if (config.voiceDebug) console.log(generateDependencyReport());
 startDashboard(config.dashboardPort);
+// Load Meta MMS-TTS in the background so the first "Any questions, Meta?" answers quickly.
+warmUpTts().catch((err) => console.warn('[tts] could not load Meta MMS-TTS; Orbit will post questions as text only:', err.message));
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],

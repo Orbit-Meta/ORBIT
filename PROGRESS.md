@@ -5,8 +5,8 @@
 | 0. Plan & verify | ✅ Done |
 | 1. Bot skeleton + **voice receive spike** + crew self-registration | ✅ Done; verified live by Sasha |
 | 2. Voice capture + Muse Voice Transcribe + live screen (transcript) | ✅ Done; live call produced an accurate 13-line, speaker-labeled transcript |
-| 3. Muse Spark summary + live screen (rolling insights, reasoning) | 🧪 Done and tested with real Muse Spark + a real Discord post; waiting for your review |
-| 3b. "Any questions, Meta?" spoken gap questions | ⏳ Not started |
+| 3. Muse Spark summary + live screen (rolling insights, reasoning) | ✅ Done |
+| 3b. "Any questions, Meta?" spoken gap questions | 🧪 Done and tested with real Muse Spark + MMS-TTS; waiting for your live test in a call |
 | 4. Private constraints + plan resolution | ⏳ Not started |
 | 5. Google Calendar | ⏳ Not started |
 | 6. Demo hardening | ⏳ Not started |
@@ -98,6 +98,30 @@
   - Live notes used a debounce, which never fired while people kept talking. Switched to a throttle.
   - The recap's call length used "now" instead of when the call ended.
 
+### Phase 3b decisions
+- **Wake phrase:** a final transcript line containing "question(s)" plus "Meta" (or how recognition might spell it: Metta, Mehta, Meda). Spoken triggers have a 30 s cooldown so echoes can't loop.
+  - Backup: the `/questions` slash command, with no cooldown.
+- **`askQuestions()`** (`src/core/`, connector-ready) returns `{ questions, followUpWith, dropped, spokenText }`.
+  - At most 3 questions.
+  - People who weren't in the call are never asked aloud ("I'll check with Angel separately").
+  - The spoken reply always ends with "I'll DM each of you privately about food preferences and budget." (approved zero-ego behavior).
+- **Zero-ego, two layers:**
+  1. The prompt forbids asking about money, diet, or health aloud.
+  2. A regex guard in `askQuestions.js` drops any question mentioning them before it's spoken.
+- **Orbit's spoken turn** is added to the transcript as speaker "Orbit", so later answers make sense in the recap. The summary prompt says Orbit isn't a person in the plan.
+  - Orbit's turn is also posted as text in the voice channel's chat, as a fallback and for accessibility.
+- **TTS:** `@huggingface/transformers` 4.3.1 is now a dependency.
+  - The model cache is in `data/models/` (gitignored, survives reinstalls).
+  - npm 11 blocks `onnxruntime-node`'s postinstall, but that script only fetches optional GPU binaries; the CPU runtime works.
+
+### Phase 3b test results (real Muse Spark + real MMS-TTS)
+- **Wake phrase:** 7/7 correct (4 variants matched, 3 decoys rejected).
+- **Real call + "Any questions, Meta?":** one question ("What exact time after five should we meet?") plus "I'll check with Angel separately." It didn't re-ask the day or place.
+- **Adversarial (budget and allergy said out loud):** it asked only "sushi or tacos?" and "what time Saturday?". Nothing private was asked aloud.
+- **Fully settled plan:** "Nope, I think you've covered everything I need."
+- **TTS:** 9.1 s of speech became 452 Opus packets (about 453 expected), through the real `createAudioResource` path.
+- **Fixed:** questions without a question mark ran together when spoken; punctuation is now added.
+
 ## Verification log (2026-10-25)
 - **DAVE is mandatory:** Discord has enforced E2EE voice since March 2026.
 - **@discordjs/voice 0.19.2:** contains PR #11449, the probable DAVE receive fix. Not publicly confirmed; packet-loss issue #11441 was closed without a fix.
@@ -113,6 +137,8 @@
   - **Voice receive works with DAVE on @discordjs/voice 0.19.2** in a regular voice channel, so the Stage fallback wasn't needed.
 - **Minor:** a display name with no letters or digits turns into the filename `_`. This only affects the Phase 1 WAV files, which Phase 2 removes.
 - **Angel (Partner 3) hasn't registered yet**, so the recap can't @mention them. They need to click Join Orbit or run `/link-email` before the Phase 4 DMs.
+- **Echo risk:** if someone in the call uses speakers instead of headphones, their mic may pick up Orbit's voice and transcribe it as their line. Use headphones for the demo.
+- **TTS and non-Latin names:** MMS-TTS (English) can't pronounce non-Latin names like "лс забанили"; they're skipped in speech but still shown in text.
 - **Display names in transcripts:** a speaker label is the person's Discord display name (e.g. "лс забанили"). For the demo, consider readable display names.
 - **Dev environment note:** Windows PowerShell 5.1 reads UTF-8 files without a BOM as ANSI. Edit files with Node or the editor, not `Get-Content`/`Set-Content`.
 - **Not in the docs:** realtime handshake field names for `ENDPOINTING` settings. We don't need them; we use `PUSH_TO_TALK` per utterance.

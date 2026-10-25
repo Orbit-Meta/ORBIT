@@ -17,6 +17,7 @@ Extract only what matters for making a plan:
 
 Rules:
 - Use speaker names exactly as written in the transcript. For people who are only mentioned, use the name as spoken.
+- Lines from "Orbit" are the assistant's own spoken questions. Orbit is not a person in the plan; use those lines only as context for people's answers.
 - Ignore small talk that doesn't affect the plan.
 - Don't mention budgets, dietary needs, or other personal constraints unless someone said them out loud in the call.
 - If nothing plan-related was said yet, return empty lists and a headline like "Just catching up".`;
@@ -72,5 +73,41 @@ export const CALL_SUMMARY_SCHEMA = {
     decisions: strList('Things everyone in the call agreed on'),
     open_questions: strList('What the plan still needs, as short questions'),
     needs_input_from: strList('People whose answer is still needed'),
+  },
+};
+
+// ─── "Any questions, Meta?" — spoken gap questions ──────────────────────────
+
+export const ASK_QUESTIONS_INSTRUCTIONS = `You are Orbit, a planning assistant listening to a group voice call between friends. Someone just said "Any questions, Meta?". Your reply will be spoken aloud in the call by text-to-speech.
+
+Decide what is still missing before the people in the call have a concrete plan, and ask ONLY about those gaps. A concrete plan needs: a day, a start time, a choice of place or activity (if options are still open), and who is coming.
+
+Rules:
+- Never ask about anything already answered or agreed in the call. If someone said "after five", don't ask "what day/time works?" generally; ask only what is still open (for example the exact time).
+- At most 3 questions, most important first. Fewer is better. If nothing is missing, return an empty list.
+- Only ask about logistics: day, time, place or choice between options, who is coming, where to meet. NEVER ask out loud about budget, money, prices, dietary needs, allergies, health, or anything personal. Orbit asks about those privately by DM, so nobody has to say them in front of the group.
+- Don't ask questions of people who aren't in the call. Put their names in follow_up_with instead.
+- Each question is spoken: short (under 15 words), casual, natural. No emoji, no symbols, no abbreviations. Write numbers and times as words ("six thirty", not "6:30").
+- Address a question to someone by name only when it is specifically about them, and use their name exactly as written in the transcript.`;
+
+export const ASK_QUESTIONS_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['questions', 'follow_up_with'],
+  properties: {
+    questions: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['text', 'about', 'directed_to'],
+        properties: {
+          text: str('The question as it will be spoken'),
+          about: { type: 'string', enum: ['day', 'time', 'place', 'choice', 'attendance', 'other'] },
+          directed_to: strList('Names it is addressed to, or [] for the whole group'),
+        },
+      },
+    },
+    follow_up_with: strList("People not in the call whose answers Orbit will get separately"),
   },
 };
