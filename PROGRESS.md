@@ -7,8 +7,8 @@
 | 2. Voice capture + Muse Voice Transcribe + live screen (transcript) | ✅ Done; live call produced an accurate 13-line, speaker-labeled transcript |
 | 3. Muse Spark summary + live screen (rolling insights, reasoning) | ✅ Done |
 | 3b. "Any questions, Meta?" spoken gap questions | ✅ Done |
-| 4. Private constraints + plan resolution | 🧪 Done; `npm run test:privacy` passes with real Muse Spark; waiting for your live DM test |
-| 5. Google Calendar | ⏳ Not started |
+| 4. Private constraints + plan resolution | ✅ Done |
+| 5. Google Calendar | 🧪 Code complete and tested with Google traffic intercepted; waiting for you to run `npm run google:auth` and test live |
 | 6. Demo hardening | ⏳ Not started |
 
 ## Decisions
@@ -151,6 +151,31 @@
   - The leak guard caught a deliberately leaky message ("under $13 and sesame-free").
   - The resolved plan was correct: Chipotle (sushi ruled out by the allergy and budgets) at 6:30 PM (Angel's window), with Jordan left out without explanation and a neutral announcement.
 - **The DM card and modal build valid Discord JSON:** 5 labeled fields, option dropdown, 39-character title.
+
+### Phase 5 decisions
+- **No Google SDK:** OAuth and Calendar v3 are called with plain `fetch` (`src/google/auth.js`, `src/google/calendar.js`). No new dependency.
+- **Sign-in (`npm run google:auth`):** Desktop-app OAuth with a loopback redirect on a random local port, plus PKCE and a state check.
+  - Scopes: `calendar.events` plus `openid email` (only to show which account is connected).
+  - Verifies the connection by reading the calendar's name; creates nothing.
+- **Token storage:** `data/google-token.json` (gitignored), not `.env`, because the editor has overwritten `.env` before. `GOOGLE_REFRESH_TOKEN` in `.env` still overrides the file.
+- **`createEvent()`** (`src/core/`, connector-ready) sends title, location, the guarded public message as the description, start/end in `TIMEZONE` (default 2 h, rolls past midnight), and attendees with `sendUpdates=all`.
+  - `guestsCanSeeOtherGuests: false` and `guestsCanInviteOthers: false`.
+- **Who gets invited:** the plan's attendee names matched to round members, then to their linked emails (fallback: every member who didn't decline).
+  - People without a linked email are named in the confirmation ("use `/link-email`").
+  - Email addresses are never posted.
+- **Flow:** the plan is posted, the event is created, then a "📅 Added to Google Calendar" message is posted with the event link. The live screen's plan banner shows the calendar link.
+- **Retry:** if Calendar fails (e.g. the 7-day testing-mode sign-in expired), the group sees why. After fixing it, `/resolve` retries just the calendar step for the latest plan.
+- **`npm run google:test`:** creates one "Orbit test event (safe to delete)" tomorrow 6–7 PM with no invites, to check the connection before a demo.
+
+### Phase 5 test results
+- **`npm run test:privacy`** now also covers the calendar invite. Google traffic is intercepted (no real event); Muse Spark is real. **PASSED:**
+  - The invite contains no private canaries.
+  - It goes to exactly Sam, Riley, and Angel (Jordan declined).
+  - `sendUpdates=all`, and the guest list is hidden.
+  - No email addresses appear in the group channel or on the live screen.
+- **Event time math:** checked for same-day events, a default 2 h length, past midnight, and New Year's Eve.
+- **OAuth URL:** has the right scopes, PKCE S256, and `access_type=offline`.
+- **Not yet tested live:** the real Google sign-in and real event creation. Both need your browser sign-in.
 
 ## Verification log (2026-10-25)
 - **DAVE is mandatory:** Discord has enforced E2EE voice since March 2026.

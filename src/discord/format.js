@@ -118,6 +118,15 @@ export function planEmbed(plan, publicMessage) {
   return embed;
 }
 
+/** Calendar confirmation for the group: names only, never email addresses. */
+export function calendarEmbed({ htmlLink, invited = [], noEmail = [], error }) {
+  if (error) return new EmbedBuilder().setColor(0xf5a524).setTitle("📅 Couldn't add it to Google Calendar").setDescription(error);
+  const lines = [invited.length ? `Invites sent to ${invited.map((n) => `**${n}**`).join(', ')}.` : 'Added to the organizer\'s calendar (no one had linked an email yet).'];
+  if (noEmail.length) lines.push(`No invite for ${noEmail.join(', ')}: use \`/link-email\` to get invites next time.`);
+  lines.push('', `[Open in Google Calendar](${htmlLink})`);
+  return new EmbedBuilder().setColor(0x31c48d).setTitle('📅 Added to Google Calendar').setDescription(lines.join('\n'));
+}
+
 export function joinOrbitCard() {
   return new EmbedBuilder()
     .setColor(ORBIT_BLUE)

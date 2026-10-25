@@ -10,7 +10,7 @@ const commands = [
   { name: 'stop', description: 'Orbit stops listening and leaves the call', run: voice.stop },
   { name: 'recap', description: 'Summarize the call so far', run: voice.recap },
   { name: 'questions', description: 'Orbit asks what the plan is still missing (same as saying "Any questions, Meta?")', run: voice.questions },
-  { name: 'resolve', description: 'Make the plan now with the private replies received so far', run: voice.resolve },
+  { name: 'resolve', description: 'Make the plan now with the replies so far (or retry adding it to Google Calendar)', run: voice.resolve },
   {
     name: 'ask',
     description: 'Send someone a private check-in for the current plan',

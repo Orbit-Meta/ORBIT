@@ -36,5 +36,6 @@ Non-Meta AI services used: **none**.
 - **Phase 3:** Muse Spark via the Responses API.
   - Request settings: `text.format` = strict JSON schema (`CALL_SUMMARY_SCHEMA` in `src/meta/prompts.js`), `reasoning.summary: "auto"` streamed to the live screen, `store: false`.
   - Measured on a real 13-line call: live notes ~3–4 s (effort low), recap ~7–8 s (effort medium), ~1.3k input tokens.
+- **Phase 5:** no new AI calls. Google Calendar is a plain API, not AI. The event description is the Muse Spark announcement after it passes the privacy guard.
 - **Phase 4:** Muse Spark reads private DM answers and resolves the plan. Privacy is shown with `npm run test:privacy`, which uses real Muse Spark calls.
 - **Phase 3b:** Muse Spark gap questions (~1.3–4.7 s at effort low) plus Meta MMS-TTS, local, about 1 s per sentence once loaded. Both appear in the live screen's activity panel.

@@ -443,6 +443,15 @@
       card.append(el('div', 'prow', `📍 ${p.plan.location || p.plan.place_name}`));
       if (p.plan.attendees.length) card.append(el('div', 'prow', `🙋 ${p.plan.attendees.join(', ')}`));
     }
+    if (p.calendar) {
+      const row = el('div', 'prow', `📅 On Google Calendar · invites sent to ${p.calendar.invited.length} `);
+      const a = el('a', null, 'open event');
+      a.href = p.calendar.htmlLink;
+      a.target = '_blank';
+      a.style.color = '#7fb0ff';
+      row.append(a);
+      card.append(row);
+    }
     box.replaceChildren(card);
   }
 

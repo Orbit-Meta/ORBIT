@@ -5,7 +5,9 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "test:privacy": "node scripts/privacy-check.mjs"
+    "test:privacy": "node scripts/privacy-check.mjs",
+    "google:auth": "node scripts/google-auth.mjs",
+    "google:test": "node scripts/calendar-check.mjs"
   },
   "repository": {
     "type": "git",

@@ -14,11 +14,30 @@ import path from 'node:path';
 
 process.env.ORBIT_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'orbit-privacy-'));
 process.env.DM_EVERYONE = 'true';
+// Google is intercepted below: this test never creates a real calendar event or sends a real invite.
+process.env.GOOGLE_CLIENT_ID = 'test-client';
+process.env.GOOGLE_CLIENT_SECRET = 'test-secret';
+process.env.GOOGLE_REFRESH_TOKEN = 'test-refresh-token';
+const googleCalls = [];
+const realFetch = globalThis.fetch;
+globalThis.fetch = async (url, init) => {
+  const u = String(url);
+  const json = (body) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  if (u.startsWith('https://oauth2.googleapis.com/')) return json({ access_token: 'test', expires_in: 3600 });
+  if (u.startsWith('https://www.googleapis.com/calendar/')) {
+    googleCalls.push({ url: u, body: JSON.parse(init.body) });
+    return json({ id: 'test-event', htmlLink: 'https://calendar.google.com/calendar/event?eid=test' });
+  }
+  return realFetch(url, init); // Muse Spark calls are real
+};
 const { config, requireEnv } = await import('../src/config.js');
 requireEnv('MODEL_API_KEY');
 const { bus } = await import('../src/dashboard/bus.js');
 const { startRound, handleRoundInteraction, getRound } = await import('../src/plan/round.js');
 const { privateTerms, findLeaks } = await import('../src/core/privacyGuard.js');
+const { upsertPerson } = await import('../src/store/people.js');
+const emails = { sam: 'sam@example.com', riley: 'riley@example.com', angel: 'angel@example.com', jordan: 'jordan@example.com' };
+for (const [id, email] of Object.entries(emails)) upsertPerson(id, { name: id[0].toUpperCase() + id.slice(1), email });
 
 // ── A call where Sam and Riley planned Friday dinner; Angel and Jordan weren't there ──
 const transcriptText = [
@@ -108,10 +127,12 @@ await handleRoundInteraction(interaction('jordan', 'orbit:round:decline:privacy-
 
 // ── Check every public surface ──
 const planFile = fs.readFileSync(path.join(config.dataDir, 'plans', 'privacy-check.json'), 'utf8');
+const event = googleCalls.find((c) => c.url.includes('/events'));
 const surfaces = {
   'group channel messages + edits': groupLog.map((g) => g.json).join('\n'),
   'live screen (all bus events)': busLog.map((b) => b.json).join('\n'),
   'public plan file (data/plans)': planFile,
+  'Google Calendar invite (seen by every guest)': event ? JSON.stringify({ ...event.body, attendees: undefined }) : '',
 };
 let failed = false;
 console.log('\nSearching public surfaces for private canaries:');
@@ -138,11 +159,23 @@ const caught = findLeaks("Chipotle it is since it's under $13 and sesame-free!",
 console.log(`  ${caught.length ? '✅' : '❌'} leak guard catches a leaky message (${caught.join(', ')})`);
 if (!caught.length) failed = true;
 
+// The calendar event: right guests, invites emailed, guests can't see each other's emails.
+const invitedEmails = (event?.body.attendees ?? []).map((a) => a.email).sort();
+const expected = ['angel@example.com', 'riley@example.com', 'sam@example.com'];
+const calendarOk =
+  event && JSON.stringify(invitedEmails) === JSON.stringify(expected) && event.url.includes('sendUpdates=all') && event.body.guestsCanSeeOtherGuests === false;
+console.log(`  ${calendarOk ? '✅' : '❌'} calendar event invites Sam, Riley, Angel (not Jordan, who declined), emails invites, hides guest list`);
+if (!calendarOk) failed = true;
+if (event) console.log(`     → "${event.body.summary}" · ${event.body.location} · ${event.body.start.dateTime}–${event.body.end.dateTime.slice(11)} (${event.body.start.timeZone})`);
+const emailsInGroup = Object.values(emails).filter((e) => groupLog.some((g) => g.json.includes(e)) || busLog.some((b) => b.json.includes(e)));
+console.log(`  ${emailsInGroup.length ? '❌' : '✅'} no email addresses in the group channel or live screen`);
+if (emailsInGroup.length) failed = true;
+
 const round = getRound('privacy-check');
 console.log('\nWhat the group saw:');
 console.log(`  Status: ${round.invited ? Object.values(round.invited).map((p) => `${p.name}=${p.status === 'declined' ? 'replied' : p.status === 'answered' ? 'replied' : p.status}`).join(', ') : ''}`);
 console.log(`  Plan:   ${round.plan.title} · ${round.plan.location} · ${round.plan.date} ${round.plan.start_time}–${round.plan.end_time}`);
 console.log(`  Message: "${round.publicMessage}"`);
-console.log(`\n${failed ? '❌ PRIVACY CHECK FAILED' : '✅ PRIVACY CHECK PASSED: private answers never reached a group channel or the live screen.'}`);
+console.log(`\n${failed ? '❌ PRIVACY CHECK FAILED' : '✅ PRIVACY CHECK PASSED: private answers never reached a group channel, the live screen, or the calendar invite.'}`);
 fs.rmSync(config.dataDir, { recursive: true, force: true });
 process.exit(failed ? 1 : 0);

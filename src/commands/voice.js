@@ -4,7 +4,7 @@ import { requireEnv } from '../config.js';
 import { endSession, getRecentSession, getSession, pauseSession, resumeSession, startSession } from '../voice/session.js';
 import { postRecap } from '../discord/recap.js';
 import { answerQuestions } from '../voice/askMeta.js';
-import { getActiveRound, inviteToRound, resolveRound, startRound } from '../plan/round.js';
+import { addToCalendar, getActiveRound, getPlanMissingCalendar, inviteToRound, resolveRound, startRound } from '../plan/round.js';
 import { listeningNotice, stateNotice } from '../discord/format.js';
 
 const ephemeral = (content) => ({ content, flags: MessageFlags.Ephemeral });
@@ -92,10 +92,16 @@ export async function stop(interaction) {
   return interaction.editReply({ embeds: [stateNotice('⏹️', lines.join('\n'))] });
 }
 
-/** Plan now with the private replies received so far. */
+/** Plan now with the private replies received so far (or retry the calendar step). */
 export async function resolve(interaction) {
   const round = getActiveRound(interaction.guildId);
-  if (!round) return interaction.reply(ephemeral('No private check-ins are in progress. They start when a call ends.'));
+  if (!round) {
+    const missing = getPlanMissingCalendar(interaction.guildId);
+    if (!missing) return interaction.reply(ephemeral('No private check-ins are in progress. They start when a call ends.'));
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const cal = await addToCalendar(interaction.client, missing);
+    return interaction.editReply(cal ? '📅 Added the plan to Google Calendar.' : "📅 Still couldn't add it. See the message in the channel.");
+  }
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   try {
     await resolveRound(interaction.client, round);

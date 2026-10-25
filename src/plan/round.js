@@ -21,8 +21,11 @@ import { config } from '../config.js';
 import { bus } from '../dashboard/bus.js';
 import { collectConstraints } from '../core/collectConstraints.js';
 import { resolvePlan } from '../core/resolvePlan.js';
-import { checkInEmbed, checkInStatusEmbed, planEmbed } from '../discord/format.js';
+import { createEvent } from '../core/createEvent.js';
+import { isCalendarConnected } from '../google/auth.js';
+import { calendarEmbed, checkInEmbed, checkInStatusEmbed, planEmbed } from '../discord/format.js';
 import { readJson, writeJson } from '../store/jsonFile.js';
+import { getPerson } from '../store/people.js';
 import { readPrivate, savePrivateAnswer, savePrivateRationale } from '../store/privateStore.js';
 
 const ROUNDS_DIR = path.join(config.dataDir, 'rounds');
@@ -44,16 +47,25 @@ export function getRound(id) {
   return rounds.get(id) ?? null;
 }
 
-export function getActiveRound(guildId) {
+/** Newest round for this server (from disk too, so it survives restarts). */
+function latestRound(guildId) {
   if (!activeByGuild.has(guildId)) {
-    // After a restart: pick up the newest unresolved round for this server from disk.
     const files = fs.existsSync(ROUNDS_DIR) ? fs.readdirSync(ROUNDS_DIR).filter((f) => f.endsWith('.json')).sort().reverse() : [];
-    const latest = files.map((f) => getRound(f.slice(0, -5))).find((r) => r?.guildId === guildId && !r.resolved);
+    const latest = files.map((f) => getRound(f.slice(0, -5))).find((r) => r?.guildId === guildId);
     if (latest) activeByGuild.set(guildId, latest.id);
   }
-  const id = activeByGuild.get(guildId);
-  const round = id && getRound(id);
+  return getRound(activeByGuild.get(guildId) ?? '') ?? null;
+}
+
+export function getActiveRound(guildId) {
+  const round = latestRound(guildId);
   return round && !round.resolved ? round : null;
+}
+
+/** The newest plan that was resolved but didn't make it onto the calendar (e.g. sign-in expired). */
+export function getPlanMissingCalendar(guildId) {
+  const round = latestRound(guildId);
+  return round?.resolved && round.plan?.feasible && !round.calendar ? round : null;
 }
 
 /** What the group and the live screen may see. */
@@ -101,6 +113,7 @@ export async function startRound(client, guildId, call) {
     summary: call.summary,
     transcriptText: call.transcriptText,
     invited: {},
+    members: [...call.inCall, ...call.absent].map(({ id, name }) => ({ id, name })), // for calendar invites
     unregistered: [],
     statusMessageId: null,
     resolved: false,
@@ -123,6 +136,8 @@ export async function startRound(client, guildId, call) {
 export async function inviteToRound(client, round, person) {
   if (round.invited[person.id]) return false;
   round.unregistered = round.unregistered.filter((n) => n.toLowerCase() !== person.name.toLowerCase());
+  round.members ??= [];
+  if (!round.members.some((m) => m.id === person.id)) round.members.push({ id: person.id, name: person.name });
   await invite(client, round, { ...person, wasInCall: false });
   await refreshStatus(client, round);
   return true;
@@ -285,8 +300,53 @@ export async function resolveRound(client, round) {
     const message = await channel.send({ embeds: [planEmbed(result.plan, result.publicMessage)] });
     bus.emit('plan', { plan: result.plan, publicMessage: result.publicMessage });
     console.log(`[round] plan posted: ${result.plan.title}`);
+    await addToCalendar(client, round);
     return { plan: result.plan, publicMessage: result.publicMessage, message }; // never the private rationale
   } finally {
     round.resolving = false;
+  }
+}
+
+// ─── Google Calendar ───────────────────────────────────────────────────────
+
+/** Create the event, email invites to everyone coming who linked an email, and confirm in the group. */
+export async function addToCalendar(client, round) {
+  if (!round.plan?.feasible || round.calendar) return round.calendar ?? null;
+  round.members ??= []; // rounds saved before calendar support
+  const channel = await groupChannel(client);
+  if (!isCalendarConnected()) {
+    await channel.send({ embeds: [calendarEmbed({ error: "Google Calendar isn't connected yet. Run `npm run google:auth`, then `/resolve`." })] });
+    return null;
+  }
+
+  // Who's coming: the names Muse Spark chose, matched to crew members (everyone not declined as a fallback).
+  const wanted = new Set(round.plan.attendees.map((n) => n.toLowerCase()));
+  const declined = new Set(Object.entries(round.invited).filter(([, p]) => p.status === 'declined').map(([id]) => id));
+  let going = round.members.filter((m) => wanted.has(m.name.toLowerCase()));
+  if (!going.length) going = round.members.filter((m) => !declined.has(m.id));
+  const attendees = going.map((m) => ({ name: m.name, email: getPerson(m.id)?.email })).filter((a) => a.email);
+  const memberNames = new Set(round.members.map((m) => m.name.toLowerCase()));
+  const noEmail = [
+    ...going.filter((m) => !getPerson(m.id)?.email).map((m) => m.name),
+    ...round.plan.attendees.filter((n) => !memberNames.has(n.toLowerCase())),
+  ];
+
+  try {
+    const event = await createEvent({
+      plan: round.plan,
+      attendees,
+      description: `${round.publicMessage}\n\nPlanned with Orbit from your group call · powered by Meta Muse (Voice Transcribe + Spark).`,
+      timezone: config.timezone,
+    });
+    round.calendar = { eventId: event.eventId, htmlLink: event.htmlLink, invited: event.invited, noEmail };
+    saveRound(round);
+    await channel.send({ embeds: [calendarEmbed(round.calendar)] });
+    bus.emit('plan', { plan: round.plan, publicMessage: round.publicMessage, calendar: round.calendar });
+    console.log(`[calendar] event created, invites sent to ${event.invited.length} people`);
+    return round.calendar;
+  } catch (err) {
+    console.error('[calendar] failed:', err.message);
+    await channel.send({ embeds: [calendarEmbed({ error: `${err.message} Fix it, then use \`/resolve\` to try again.` })] });
+    return null;
   }
 }
