@@ -5,6 +5,7 @@ import { endSession, getRecentSession, getSession, pauseSession, resumeSession, 
 import { postRecap } from '../discord/recap.js';
 import { answerQuestions } from '../voice/askMeta.js';
 import { runDemo } from '../demo/runDemo.js';
+import { serverName } from '../discord/names.js';
 import { addToCalendar, getActiveRound, getPlanMissingCalendar, inviteToRound, resolveRound } from '../plan/round.js';
 import { listeningNotice, stateNotice } from '../discord/format.js';
 
@@ -101,8 +102,7 @@ export async function ask(interaction) {
   const round = getActiveRound(interaction.guildId);
   if (!round) return interaction.reply(ephemeral('No private check-ins are in progress. They start when a call ends.'));
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const member = await interaction.guild.members.fetch(user.id).catch(() => null);
-  const added = await inviteToRound(interaction.client, round, { id: user.id, name: member?.displayName ?? user.username });
+  const added = await inviteToRound(interaction.client, round, { id: user.id, name: await serverName(interaction.guild, user.id) });
   return interaction.editReply(added ? `📬 Sent ${user} a private check-in.` : `${user} already has a check-in.`);
 }
 

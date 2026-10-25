@@ -1,11 +1,32 @@
 import fs from 'node:fs';
 import http from 'node:http';
+import path from 'node:path';
 import { bus } from './bus.js';
 
-// The live "Orbit is thinking" screen: one HTML page + a Server-Sent Events stream.
+// The live "Orbit is thinking" screen: the React app in dashboard/ (built to dashboard/dist by
+// `npm run dashboard:build`, which `npm start` runs first) + a Server-Sent Events stream at /events.
 // Bound to localhost only. It shows what happens in the call, never private DM content.
-const PAGE = fs.readFileSync(new URL('./public/index.html', import.meta.url));
+const DIST = path.resolve(import.meta.dirname, '../../dashboard/dist');
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.woff': 'font/woff', '.ico': 'image/x-icon' };
 const MAX_MUSE_LOG = 60;
+
+function serveStatic(req, res) {
+  const urlPath = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
+  const file = path.join(DIST, urlPath === '/' ? 'index.html' : urlPath);
+  if (!file.startsWith(DIST + path.sep)) return res.writeHead(403).end(); // no ../ escapes
+  fs.readFile(file, (err, body) => {
+    if (err) {
+      if (urlPath === '/') {
+        res.writeHead(503, { 'Content-Type': 'text/plain; charset=utf-8' });
+        return res.end('The live screen has not been built yet. Run `npm run dashboard:build` (npm start does this automatically).');
+      }
+      return res.writeHead(404).end();
+    }
+    const cache = urlPath.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache';
+    res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] ?? 'application/octet-stream', 'Cache-Control': cache });
+    res.end(body);
+  });
+}
 
 const clients = new Set();
 const snapshot = { session: null, partials: {}, finals: [], muse: [], insights: null, thinking: null, round: null, plan: null };
@@ -70,11 +91,8 @@ export function startDashboard(port) {
       req.on('close', () => clients.delete(res));
       return;
     }
-    if (req.url === '/' || req.url === '/index.html') {
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      return res.end(PAGE);
-    }
-    res.writeHead(404).end();
+    if (req.method !== 'GET') return res.writeHead(405).end();
+    serveStatic(req, res);
   });
 
   // Keep idle connections alive through proxies and sleepy laptops.

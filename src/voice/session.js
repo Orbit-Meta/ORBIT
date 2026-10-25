@@ -9,7 +9,8 @@ import { Transcript } from './transcript.js';
 import { stateNotice } from '../discord/format.js';
 import { postRecap } from '../discord/recap.js';
 import { startRound } from '../plan/round.js';
-import { listPeople } from '../store/people.js';
+import { listPeople, renamePerson } from '../store/people.js';
+import { serverName } from '../discord/names.js';
 import { bus } from '../dashboard/bus.js';
 
 // One listening session per server. State: 'listening' | 'paused' | 'ended'.
@@ -67,7 +68,27 @@ class Session {
 
   /** Registered crew members who were never in this call: they get the recap ping and a private DM. */
   absentCrew() {
-    return listPeople().filter((p) => !this.participantIds.has(p.id));
+    return listPeople()
+      .filter((p) => !this.participantIds.has(p.id))
+      .map((p) => ({ ...p, name: this.names.get(p.id) ?? p.name }));
+  }
+
+  /** Look up people's current server nicknames (and keep people.json in sync). */
+  async refreshNames(ids) {
+    await Promise.all(
+      [...new Set(ids)].filter((id) => /^\d+$/.test(id)).map(async (id) => {
+        const name = await serverName(this.guild, id);
+        this.names.set(id, name);
+        renamePerson(id, name);
+      }),
+    );
+  }
+
+  /** Fetch a newly seen person's server nickname once per call. */
+  ensureName(userId) {
+    if (this.names.has(userId) || !/^\d+$/.test(userId)) return;
+    this.names.set(userId, this.nameOf(userId)); // placeholder until Discord answers
+    this.refreshNames([userId]).catch(() => {});
   }
 
   /** Everything a planning round needs (all public: names, summary, transcript). */
@@ -100,11 +121,12 @@ class Session {
     return this.guild.client.users.cache.get(userId)?.bot ?? false;
   }
 
+  /** Server nickname as fetched by refreshNames(); the member cache is only a fallback. */
   nameOf(userId) {
     return (
       this.names.get(userId) ??
       this.guild.members.cache.get(userId)?.displayName ??
-      this.guild.client.users.cache.get(userId)?.username ??
+      this.guild.client.users.cache.get(userId)?.displayName ??
       userId
     );
   }
@@ -174,6 +196,8 @@ export async function startSession({ guild, voiceChannel, textChannel, capture =
   }
 
   const session = new Session({ guild, voiceChannel: voiceChannel ?? voicelessChannel(textChannel), connection });
+  // Everyone in the call and every crew member, by their current server nickname.
+  await session.refreshNames([...session.participantIds, ...listPeople().map((p) => p.id)]);
   session.player = null;
   if (connection) {
     session.player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
@@ -272,6 +296,7 @@ export async function wrapUpCall(s) {
   }
   if (s.summary) {
     try {
+      await s.refreshNames([...s.participantIds, ...listPeople().map((p) => p.id)]); // nicknames may have changed during the call
       const r = await startRound(s.guild.client, s.guild.id, s.callInfo());
       lines.push(r.invited.length ? `📬 Sent ${r.invited.length} private check-in${r.invited.length === 1 ? '' : 's'} by DM.` : '📬 No one to DM: nobody is in the Orbit crew yet (`/link-email`).');
     } catch (err) {
@@ -290,6 +315,7 @@ export async function onVoiceStateUpdate(oldState, newState) {
 
   if (newState.channelId === channelId && oldState.channelId !== channelId) {
     s.participantIds.add(newState.id);
+    s.ensureName(newState.id);
     await s.voiceChannel
       .send({
         content: `<@${newState.id}>`,

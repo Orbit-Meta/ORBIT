@@ -84,6 +84,10 @@ const modelDir = path.join(config.dataDir, 'models');
 const cached = fs.existsSync(modelDir) && fs.readdirSync(modelDir, { recursive: true }).some((f) => String(f).endsWith('.onnx'));
 cached ? ok('Meta MMS-TTS model', 'cached locally') : warn('Meta MMS-TTS model', 'not downloaded yet: the first `npm start` downloads it (~10 s)');
 
+fs.existsSync(new URL('../dashboard/dist/index.html', import.meta.url))
+  ? ok('Live screen build', 'dashboard/dist is built')
+  : warn('Live screen build', 'not built yet: `npm start` builds it automatically (or run `npm run dashboard:build`)');
+
 const { listPeople } = await import('../src/store/people.js');
 const crew = listPeople();
 if (crew.length >= 2) ok('Orbit crew', `${crew.length} people registered: ${crew.map((p) => p.name).join(', ')}`);

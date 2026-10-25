@@ -1,5 +1,8 @@
 node_modules/
 .env
-data/
+# Orbit's runtime data (private answers, tokens, transcripts) — root only, so the skill's data/ is kept
+/data/
 *.log
 .DS_Store
+dashboard/dist/
+__pycache__/

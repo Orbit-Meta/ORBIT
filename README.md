@@ -157,11 +157,27 @@ If live audio fails on stage, run **`/demo`** while you're in a voice channel. O
 
 ---
 
+## The live screen
+
+`http://localhost:3000` is a React app in [`dashboard/`](dashboard/), built with **shadcn/ui** (Card, Badge, ScrollArea, Avatar, Separator) on Tailwind v4, using lucide icons and the Inter font bundled locally.
+- **Design:** minimal black and white. Meta blue `#0866FF` appears in exactly three places: the pulsing "Listening" dot, the accent line beside Orbit's own spoken turn, and the calendar link. The final plan is the one inverted black card.
+- **Names** are each person's **server nickname**, falling back to their global display name, then username, exactly as they appear in your Discord server.
+- **Building:** `npm start` builds the page first (under a second). The bot serves `dashboard/dist` and streams live updates over Server-Sent Events at `/events`.
+- **Working on the UI:** run the bot, then `npm run dashboard:dev` for hot reload. It proxies `/events` from the running bot.
+
+**Design tooling** (in the repo, for anyone using Claude Code):
+- [`.claude/skills/ui-ux-pro-max/`](.claude/skills/ui-ux-pro-max/): the UI UX Pro Max skill (MIT, [source](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill)). Its design-system search (Python 3) recommended the "Minimalism & Swiss Style, monochrome + one accent" direction used here. On Windows, run its script with `py -3`.
+- [`.mcp.json`](.mcp.json): the **shadcn MCP server** (`shadcn@4.21.4 mcp`), so Claude Code can browse and add shadcn components. Approve it once with `/mcp` after starting Claude Code in this folder. [`components.json`](components.json) configures it.
+- After running `shadcn add`, check the new files import `cn` from `@/lib/utils`. The CLI's JavaScript output once wrote `from "cn"` and installed an unrelated npm package named `cn`.
+
+---
+
 ## Scripts
 
 | Script | Purpose |
 |---|---|
-| `npm start` | Run the bot and the live screen |
+| `npm start` | Build the live screen, then run the bot and the live screen |
+| `npm run dashboard:dev` | Live-screen development with hot reload (needs the bot running) |
 | `npm run check` | Pre-demo checklist for every credential and connection |
 | `npm run test:privacy` | Prove private answers never leak (real Muse Spark; Discord and Google are faked) |
 | `npm run google:auth` | Connect the organizer's Google Calendar |
@@ -177,11 +193,13 @@ src/
   plan/        round.js: private check-ins → plan → calendar (the only reader of private answers)
   discord/     message formatting (public data only), recap
   google/      OAuth + Calendar over fetch
-  dashboard/   live screen (Server-Sent Events) at localhost:3000
+  dashboard/   live screen server + event bus (Server-Sent Events) at localhost:3000
   demo/        demo mode
   store/       JSON files under data/ (gitignored); privateStore.js is isolated
+dashboard/     the live screen UI: React + shadcn/ui + Tailwind (built to dashboard/dist)
 scripts/       preflight, privacy check, Google sign-in/test
 demo/          script.json (+ optional call.wav)
+.claude/       UI UX Pro Max skill · .mcp.json: shadcn MCP server
 ```
 
 Built with discord.js 14 and @discordjs/voice 0.19.2 (Discord's DAVE end-to-end-encrypted voice works for receiving), plus transformers.js for MMS-TTS. Progress notes and decisions are in [PROGRESS.md](PROGRESS.md).

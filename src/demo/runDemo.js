@@ -17,6 +17,7 @@ import { transcribeFile } from '../meta/muse.js';
 import { bus } from '../dashboard/bus.js';
 import { stateNotice } from '../discord/format.js';
 import { listPeople } from '../store/people.js';
+import { serverName } from '../discord/names.js';
 import { CAPTURE_BYTES_PER_SECOND, CAPTURE_PCM } from '../voice/audio.js';
 
 const SCRIPT_FILE = new URL('../../demo/script.json', import.meta.url);
@@ -29,13 +30,13 @@ export const DEMO_MODES = {
   file: 'Your recording demo/call.wav → Muse Voice Transcribe (speaker labels)',
 };
 
-/** Who plays whom: real people where possible, so DMs and calendar invites at the end are real. */
-function castFor(member, voiceChannel) {
-  const s1 = { id: member.id, name: member.displayName };
+/** Who plays whom: real people (by server nickname) where possible, so DMs and invites at the end are real. */
+async function castFor(guild, member, voiceChannel) {
+  const s1 = { id: member.id, name: await serverName(guild, member.id) };
   const friend = voiceChannel?.members.find((m) => !m.user.bot && m.id !== member.id);
-  const s2 = friend ? { id: friend.id, name: friend.displayName } : { id: 'demo-friend', name: 'Jordan' };
+  const s2 = friend ? { id: friend.id, name: await serverName(guild, friend.id) } : { id: 'demo-friend', name: 'Jordan' };
   const absent = listPeople().find((p) => p.id !== s1.id && p.id !== s2.id);
-  return { s1, s2, absentName: absent?.name ?? 'Angel' };
+  return { s1, s2, absentName: absent ? await serverName(guild, absent.id) : 'Angel' };
 }
 
 function readWavInfo(buf) {
@@ -89,7 +90,7 @@ async function speakIntoPipeline(session, { id, text }) {
  */
 export async function runDemo({ guild, member, textChannel, mode = 'script' }) {
   const voiceChannel = member.voice?.channel ?? null;
-  const { s1, s2, absentName } = castFor(member, voiceChannel);
+  const { s1, s2, absentName } = await castFor(guild, member, voiceChannel);
 
   // Load the lines before joining, so a bad demo file fails fast with a clear message.
   let lines;

@@ -23,6 +23,14 @@ export function upsertPerson(id, { name, email }) {
   return { id, ...all[id] };
 }
 
+/** Keep the stored name in sync with the person's current server nickname. */
+export function renamePerson(id, name) {
+  const all = readJson(FILE, {});
+  if (!all[id] || all[id].name === name) return;
+  all[id].name = name;
+  writeJson(FILE, all);
+}
+
 export function removePerson(id) {
   const all = readJson(FILE, {});
   const existed = id in all;

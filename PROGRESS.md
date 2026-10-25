@@ -205,6 +205,33 @@
 - **`npm run test:privacy`:** still passes (regression).
 - **`npm run check`:** all credentials valid. Warnings: Google not signed in; only 1 crew member registered; port 3000 in use (bot running).
 
+### Post-Phase 6: names, design tooling, live-screen redesign (2026-10-25)
+- **Bug fixed: names now use the server nickname.**
+  - Orbit had shown global display names ("лс забанили", "slimy") instead of the server nicknames ("Seth", "Olu"). It read discord.js's member cache, which never learns about nickname changes without the privileged Server Members intent.
+  - New `src/discord/names.js` → `serverName()` fetches the member from Discord every time (`force: true`) and returns nickname → global display name → username. It never throws.
+  - Used when a call starts (everyone in voice plus all crew), when someone new speaks or joins, before check-ins start, in `/ask`, and when choosing the demo cast.
+  - Transcript lines take the name when they're finalized; `people.json` names are kept in sync.
+  - Verified against Discord: `serverName()` returns "Seth" and "Olu".
+- **UI UX Pro Max skill** installed in `.claude/skills/ui-ux-pro-max/` from GitHub commit `d14efff` (2026-10-23, MIT).
+  - Installed from the repo rather than the `ui-ux-pro-max-cli` npm package, because that package doesn't link to the repo.
+  - Reviewed before installing: `SKILL.md` is guidance only, and the runtime scripts make no network or shell calls. The test suite was left out.
+  - Applied the same `${CLAUDE_PLUGIN_ROOT}` → `.claude/…` path rewrite the official Claude template uses.
+  - Needs Python 3 (`py -3` on this machine).
+- **shadcn MCP server** added in `.mcp.json` (`npx shadcn@4.21.4 mcp`). The handshake was verified and it exposes 7 tools. It becomes available in Claude Code after a restart and `/mcp` approval.
+- **Live screen rebuilt** as a React app (`dashboard/`) with shadcn/ui on Tailwind v4, Vite, lucide icons, and Inter bundled locally.
+  - Dependencies are pinned, using releases that are at least about two weeks old.
+  - `npm start` builds it first (via `prestart`, under 0.5 s). `src/dashboard/server.js` serves `dashboard/dist` (with path-traversal protection) plus the same `/events` stream.
+  - The old hand-written HTML page was removed.
+- **Design** (from the skill's recommendation, "Minimalism & Swiss Style, monochrome + one accent"):
+  - White and near-black with neutral borders; grayscale speaker avatars.
+  - Meta blue only on the live dot, Orbit's own turn, and the calendar link. The final plan is an inverted black card.
+  - The provided Orbit logo was cropped and kept transparent for the header, empty state, Orbit's avatar, and favicon.
+- **Gotchas found:**
+  - The shadcn CLI's JavaScript output wrote `import { cn } from "cn"` and installed an unrelated `cn` npm package. Removed it and fixed the imports.
+  - Radix ScrollArea's `display: table` wrapper prevents text wrapping; fixed in `ui/scroll-area.jsx`.
+  - Headless Edge on Windows renders at a minimum of about 500 px, so a 390 px screenshot looks like overflow when it isn't. Verified at 520 px.
+- **Screenshots checked** (headless Edge, preview data): 1440×900 with a full plan, the thinking state, and narrow width (520 px).
+
 ## Verification log (2026-10-25)
 - **DAVE is mandatory:** Discord has enforced E2EE voice since March 2026.
 - **@discordjs/voice 0.19.2:** contains PR #11449, the probable DAVE receive fix. Not publicly confirmed; packet-loss issue #11441 was closed without a fix.

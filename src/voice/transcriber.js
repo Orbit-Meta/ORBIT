@@ -13,10 +13,11 @@ export function createTranscriberSink(session) {
   const pending = new Set(); // utterances waiting for their final transcript
 
   function begin(userId) {
-    const speaker = session.nameOf(userId);
+    session.ensureName(userId); // server nickname; labels below read it when they're emitted
     const keywords = session.keywords();
-    const u = { userId, speaker, keywords, startedAt: new Date().toISOString(), chunks: [], bytes: 0 };
-    u.stream = transcribe({ keywords, onPartial: (text) => bus.emit('partial', { userId, speaker, text }) });
+    const u = { userId, keywords, startedAt: new Date().toISOString(), chunks: [], bytes: 0 };
+    Object.defineProperty(u, 'speaker', { get: () => session.nameOf(userId) });
+    u.stream = transcribe({ keywords, onPartial: (text) => bus.emit('partial', { userId, speaker: u.speaker, text }) });
     active.set(userId, u);
     return u;
   }
