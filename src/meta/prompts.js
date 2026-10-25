@@ -111,3 +111,81 @@ export const ASK_QUESTIONS_SCHEMA = {
     follow_up_with: strList("People not in the call whose answers Orbit will get separately"),
   },
 };
+
+// ─── Private DM answers → structured constraints ────────────────────────────
+
+export const CONSTRAINTS_INSTRUCTIONS = `You turn one person's PRIVATE answers (sent to Orbit by DM) into structured planning constraints.
+
+You get the plan being discussed (public) and the person's answers. Answers are casual and may be blank.
+- can_attend: false only if they clearly say they can't make it at all.
+- availability: their availability in plain words. time_windows: the same as concrete windows. Resolve relative days against the current date provided. Use 24-hour "HH:MM", and "" for an open end (e.g. "after 6" → start "18:00", end "").
+- budget: has_budget_limit true only if they gave a limit; max_per_person_usd is that number (0 if no limit).
+- dietary_needs: each need or allergy as a short phrase ("vegetarian", "sesame allergy").
+- preferred_options: options they prefer, using the option labels from the plan when they match.
+- avoid: things they don't want.
+- other_notes: anything else that matters for planning, briefly.
+Never invent constraints that weren't stated.`;
+
+export const CONSTRAINTS_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['can_attend', 'availability', 'time_windows', 'has_budget_limit', 'max_per_person_usd', 'dietary_needs', 'preferred_options', 'avoid', 'other_notes'],
+  properties: {
+    can_attend: { type: 'boolean' },
+    availability: str('Availability in plain words, or ""'),
+    time_windows: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['date', 'start', 'end'],
+        properties: { date: str('YYYY-MM-DD or ""'), start: str('HH:MM or ""'), end: str('HH:MM or ""') },
+      },
+    },
+    has_budget_limit: { type: 'boolean' },
+    max_per_person_usd: { type: 'number' },
+    dietary_needs: strList('Dietary needs and allergies'),
+    preferred_options: strList('Preferred options'),
+    avoid: strList('Things to avoid'),
+    other_notes: str('Other planning-relevant notes, or ""'),
+  },
+};
+
+// ─── Resolve the final plan ─────────────────────────────────────────────────
+
+export const RESOLVE_PLAN_INSTRUCTIONS = `You are Orbit. Pick ONE final plan for a group of friends that satisfies everyone's constraints, then write a short announcement for the group chat.
+
+You get the public summary of the group's call and each person's PRIVATE constraints.
+
+Choosing the plan:
+- Pick a date and start time inside everyone's availability windows. If windows don't all overlap, maximize how many people can come.
+- Pick the option that respects every dietary need and stays within the lowest stated budget. Prefer options people said they like.
+- location: if a specific location was said in the call (e.g. "the Chipotle downtown"), use it exactly. Otherwise use the option name plus the default area provided (e.g. "Chipotle, Downtown").
+- end_time: a reasonable end (about 1.5–2 hours for a meal) in 24-hour HH:MM.
+- feasible: false only if no plan works for most people; then explain neutrally in public_message.
+
+public_message (posted in the GROUP chat), the most important rule:
+- Announce the plan warmly in 1–3 short sentences. You may say who is coming.
+- NEVER mention or hint at anyone's budget, prices, money, dietary needs, allergies, health, or private notes, and never say WHY an option or time was chosen if the reason came from a private constraint. "Chipotle works for everyone" is fine; "Chipotle because it's cheap / has vegetarian options / fits Sam's budget" is NOT.
+
+private_rationale: your actual reasoning, including constraints. It is stored privately and never shown to the group.`;
+
+export const RESOLVE_PLAN_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['feasible', 'title', 'choice', 'place_name', 'location', 'date', 'start_time', 'end_time', 'attendees', 'not_attending', 'public_message', 'private_rationale'],
+  properties: {
+    feasible: { type: 'boolean' },
+    title: str('Short event title, e.g. "Chipotle hangout"'),
+    choice: str('The option picked, matching an option label when possible'),
+    place_name: str('Name of the place, e.g. "Chipotle"'),
+    location: str('Where: specific location from the call, or "<place>, <default area>"'),
+    date: str('YYYY-MM-DD'),
+    start_time: str('HH:MM, 24-hour'),
+    end_time: str('HH:MM, 24-hour'),
+    attendees: strList('Names of people coming'),
+    not_attending: strList("Names of people who can't come"),
+    public_message: str('Neutral announcement for the group chat'),
+    private_rationale: str('Reasoning including private constraints (kept private)'),
+  },
+};

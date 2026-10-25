@@ -4,6 +4,7 @@ import { requireEnv } from '../config.js';
 import { endSession, getRecentSession, getSession, pauseSession, resumeSession, startSession } from '../voice/session.js';
 import { postRecap } from '../discord/recap.js';
 import { answerQuestions } from '../voice/askMeta.js';
+import { getActiveRound, inviteToRound, resolveRound, startRound } from '../plan/round.js';
 import { listeningNotice, stateNotice } from '../discord/format.js';
 
 const ephemeral = (content) => ({ content, flags: MessageFlags.Ephemeral });
@@ -78,7 +79,43 @@ export async function stop(interaction) {
       lines.push(`⚠️ Muse Spark couldn't write the recap (${err.message}). Try \`/recap\`.`);
     }
   }
+  // Then ask everyone privately for the constraints they didn't say out loud.
+  if (s.summary) {
+    try {
+      const r = await startRound(interaction.client, interaction.guildId, s.callInfo());
+      lines.push(`📬 Sent ${r.invited.length} private check-in${r.invited.length === 1 ? '' : 's'} by DM.`);
+    } catch (err) {
+      console.error('[round] could not start:', err);
+      lines.push(`⚠️ Couldn't send private check-ins: ${err.message}`);
+    }
+  }
   return interaction.editReply({ embeds: [stateNotice('⏹️', lines.join('\n'))] });
+}
+
+/** Plan now with the private replies received so far. */
+export async function resolve(interaction) {
+  const round = getActiveRound(interaction.guildId);
+  if (!round) return interaction.reply(ephemeral('No private check-ins are in progress. They start when a call ends.'));
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  try {
+    await resolveRound(interaction.client, round);
+    return interaction.editReply('🎉 Plan posted.');
+  } catch (err) {
+    console.error('[round] resolve failed:', err);
+    return interaction.editReply(`⚠️ Muse Spark couldn't resolve the plan: ${err.message}`);
+  }
+}
+
+/** DM one more person into the current check-ins. */
+export async function ask(interaction) {
+  const user = interaction.options.getUser('person', true);
+  if (user.bot) return interaction.reply(ephemeral("I can't DM bots."));
+  const round = getActiveRound(interaction.guildId);
+  if (!round) return interaction.reply(ephemeral('No private check-ins are in progress. They start when a call ends.'));
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+  const added = await inviteToRound(interaction.client, round, { id: user.id, name: member?.displayName ?? user.username });
+  return interaction.editReply(added ? `📬 Sent ${user} a private check-in.` : `${user} already has a check-in.`);
 }
 
 /** Same as saying "Any questions, Meta?" in the call. */

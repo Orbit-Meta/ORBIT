@@ -10,6 +10,7 @@ import {
 } from 'discord.js';
 import { getPerson, removePerson, upsertPerson } from '../store/people.js';
 import { joinOrbitCard } from '../discord/format.js';
+import { getActiveRound, inviteToRound } from '../plan/round.js';
 
 export const LINK_BUTTON_ID = 'orbit:link';
 export const LINK_MODAL_ID = 'orbit:link-modal';
@@ -59,10 +60,18 @@ export async function submitLinkModal(interaction) {
   const name = interaction.member?.displayName ?? interaction.user.username;
   upsertPerson(interaction.user.id, { name, email });
   console.log(`[crew] ${name} (${interaction.user.id}) linked an email`);
-  return interaction.reply({
+  await interaction.reply({
     content: `✅ You're in the Orbit crew, **${name}**. Calendar invites will go to \`${email}\`.\n-# Only you can see this message.`,
     flags: MessageFlags.Ephemeral,
   });
+
+  // Joined while friends are planning? Send them the private check-in right away.
+  const round = interaction.guildId && getActiveRound(interaction.guildId);
+  if (round) {
+    await inviteToRound(interaction.client, round, { id: interaction.user.id, name }).catch((err) =>
+      console.warn('[crew] could not invite new member to check-ins:', err.message),
+    );
+  }
 }
 
 export async function unlink(interaction) {

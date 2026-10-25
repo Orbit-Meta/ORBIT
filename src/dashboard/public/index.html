@@ -138,6 +138,17 @@
   .items li::before { position: absolute; left: 0; }
   .items.done li::before { content: '✓'; color: var(--ok); font-weight: 700; }
   .items.open li::before { content: '?'; color: var(--warn); font-weight: 700; }
+  .plan { margin-top: 12px; padding: 14px; border-radius: 12px; background: rgba(49, 196, 141, 0.1); border: 1px solid rgba(49, 196, 141, 0.35); }
+  .plan .ptitle { font-size: 19px; font-weight: 700; }
+  .plan .pmsg { margin: 6px 0 8px; }
+  .plan .prow { color: var(--muted); font-size: 14px; }
+  .plan.nope { background: rgba(245, 165, 36, 0.1); border-color: rgba(245, 165, 36, 0.35); }
+  .checkin { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 15px; }
+  .status { font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 6px; }
+  .status.replied { background: rgba(49, 196, 141, 0.14); color: var(--ok); }
+  .status.waiting { background: var(--panel-2); color: var(--muted); }
+  .status.unreachable { background: rgba(242, 109, 109, 0.14); color: var(--err); }
+  .lock { color: var(--faint); font-size: 13px; margin-top: 6px; }
   .waiting { margin-top: 14px; font-size: 14px; color: var(--muted); }
   .waiting b { color: var(--warn); }
 
@@ -195,8 +206,10 @@
       <div class="thinking-text" id="thinking-text"></div>
     </div>
     <div class="scroll">
+      <div id="plan-box"></div>
       <div class="empty" id="notes-empty">The plan shows up here as it takes shape.</div>
       <div id="notes-body"></div>
+      <div id="round-box"></div>
     </div>
   </section>
 
@@ -386,7 +399,51 @@
     if (!t || !t.active) { $('thinking').hidden = true; return; }
     $('thinking').hidden = false;
     $('thinking-task').textContent = t.task || '';
-    $('thinking-text').textContent = t.text ? t.text.split('\n').filter(Boolean).slice(-3).join('\n') : 'Reading the conversation…';
+    $('thinking-text').textContent = t.private
+      ? '🔒 Reasoning hidden: this step uses private answers.'
+      : t.text ? t.text.split('\n').filter(Boolean).slice(-3).join('\n') : 'Reading the conversation…';
+  }
+
+  // ── Private check-ins (names + replied/waiting only) and the final plan ──
+  function renderRound(r) {
+    const box = $('round-box');
+    if (!r) { box.replaceChildren(); return; }
+    const list = el('div');
+    const label = { replied: '✓ replied privately', waiting: 'waiting', unreachable: "couldn't DM" };
+    for (const p of r.invited) {
+      const row = el('div', 'checkin');
+      const name = el('b', null, p.name);
+      if (nameColor.has(p.name)) name.style.color = nameColor.get(p.name);
+      row.append(name, el('span', `status ${p.status}`, label[p.status]));
+      list.append(row);
+    }
+    for (const n of r.unregistered || []) {
+      const row = el('div', 'checkin');
+      row.append(el('b', null, n), el('span', 'status waiting', 'not in the crew yet'));
+      list.append(row);
+    }
+    list.append(el('div', 'lock', '🔒 Only Orbit sees what people answered.'));
+    box.replaceChildren(section('Private check-ins', list));
+  }
+
+  function fmtWhen(date, start, end) {
+    const day = date ? new Date(date + 'T12:00:00').toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' }) : '';
+    const t = (hm) => { const [h, m] = hm.split(':').map(Number); return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`; };
+    return [day, start ? t(start) + (end ? `–${t(end)}` : '') : ''].filter(Boolean).join(' · ');
+  }
+
+  function renderPlan(p) {
+    const box = $('plan-box');
+    if (!p) { box.replaceChildren(); return; }
+    const card = el('div', 'plan' + (p.plan.feasible ? '' : ' nope'));
+    card.append(el('div', 'ptitle', p.plan.feasible ? `🎉 It's a plan: ${p.plan.title}` : "🤔 Couldn't lock in a plan yet"));
+    card.append(el('div', 'pmsg', p.publicMessage));
+    if (p.plan.feasible) {
+      card.append(el('div', 'prow', `🗓️ ${fmtWhen(p.plan.date, p.plan.start_time, p.plan.end_time)}`));
+      card.append(el('div', 'prow', `📍 ${p.plan.location || p.plan.place_name}`));
+      if (p.plan.attendees.length) card.append(el('div', 'prow', `🙋 ${p.plan.attendees.join(', ')}`));
+    }
+    box.replaceChildren(card);
   }
 
   function setSession(s) {
@@ -428,17 +485,23 @@
     snap.muse.forEach(addMuse);
     renderInsights(snap.insights);
     setThinking(snap.thinking);
+    renderRound(snap.round);
+    renderPlan(snap.plan);
   });
   es.addEventListener('session', (e) => {
     const s = JSON.parse(e.data);
     if (s.state === 'listening' && (!sessionStart || sessionStart.toISOString() !== s.startedAt)) {
       resetTranscript();
       renderInsights(null);
+      renderRound(null);
+      renderPlan(null);
     }
     setSession(s);
   });
   es.addEventListener('insights', (e) => renderInsights(JSON.parse(e.data)));
   es.addEventListener('thinking', (e) => setThinking(JSON.parse(e.data)));
+  es.addEventListener('round', (e) => renderRound(JSON.parse(e.data)));
+  es.addEventListener('plan', (e) => renderPlan(JSON.parse(e.data)));
   es.addEventListener('partial', (e) => setPartial(JSON.parse(e.data)));
   es.addEventListener('partial-clear', (e) => clearPartial(JSON.parse(e.data)));
   es.addEventListener('final', (e) => addFinal(JSON.parse(e.data)));

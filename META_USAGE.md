@@ -19,8 +19,8 @@ All Meta AI calls go through one module: `src/meta/muse.js`. Nothing else in the
 | 2 | Muse Spark (effort `low`) | `src/voice/liveNotes.js` → `run()` calls `summarizeCall({ purpose: 'live' })` → `reason()` | Live notes during the call: who's free, options, decisions, and open questions, refreshed every ~12 s while people talk. The streamed reasoning summary appears on the live screen. | Built (Phase 3) |
 | 3 | Muse Spark (effort `medium`) | `src/discord/recap.js` → `postRecap()` calls `summarizeCall({ purpose: 'recap' })` → `reason()` | The end-of-call or `/recap` summary JSON, posted to the recap channel for people who missed the call. Raw JSON is saved in `data/summaries/`. | Built (Phase 3) |
 | 4 | Muse Spark (effort `low`) | `src/voice/askMeta.js` → `answerQuestions()` calls `askQuestions()` (`src/core/askQuestions.js`) → `reason()` | On "Any questions, Meta?" (or `/questions`), finds only what the plan is still missing (day, time, choice, who's coming) and writes up to 3 short spoken questions. Never asks about money or food restrictions out loud; a code-level guard drops any question that does. | Built (Phase 3b) |
-| 5 | Muse Spark | `src/core/collectConstraints.js` → `reason()` | Turns private DM replies into structured constraints | Planned (Phase 4) |
-| 6 | Muse Spark | `src/core/resolvePlan.js` → `reason()` | Picks a plan that satisfies all constraints and writes a neutral group message | Planned (Phase 4) |
+| 5 | Muse Spark (effort `low`) | `src/plan/round.js` → `handleRoundInteraction()` calls `collectConstraints()` (`src/core/collectConstraints.js`) → `reason()` | Turns one person's private DM answers (option, availability, budget, diet, notes) into structured constraints, stored only in `data/private/`. Reasoning is **not** streamed anywhere. | Built (Phase 4) |
+| 6 | Muse Spark (effort `medium`) | `src/plan/round.js` → `resolveRound()` calls `resolvePlan()` (`src/core/resolvePlan.js`) → `reason()` | Picks one plan (date, time, place, who's coming) that satisfies everyone's private constraints and writes a neutral announcement. A code-level leak guard checks the title, location, and announcement before anything is posted. Reasoning is **not** streamed; the rationale is stored privately. | Built (Phase 4) |
 
 ## Meta open-source model (runs locally, not part of the Muse API)
 
@@ -36,4 +36,5 @@ Non-Meta AI services used: **none**.
 - **Phase 3:** Muse Spark via the Responses API.
   - Request settings: `text.format` = strict JSON schema (`CALL_SUMMARY_SCHEMA` in `src/meta/prompts.js`), `reasoning.summary: "auto"` streamed to the live screen, `store: false`.
   - Measured on a real 13-line call: live notes ~3–4 s (effort low), recap ~7–8 s (effort medium), ~1.3k input tokens.
+- **Phase 4:** Muse Spark reads private DM answers and resolves the plan. Privacy is shown with `npm run test:privacy`, which uses real Muse Spark calls.
 - **Phase 3b:** Muse Spark gap questions (~1.3–4.7 s at effort low) plus Meta MMS-TTS, local, about 1 s per sentence once loaded. Both appear in the live screen's activity panel.

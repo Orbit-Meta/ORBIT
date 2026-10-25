@@ -8,7 +8,7 @@ const PAGE = fs.readFileSync(new URL('./public/index.html', import.meta.url));
 const MAX_MUSE_LOG = 60;
 
 const clients = new Set();
-const snapshot = { session: null, partials: {}, finals: [], muse: [], insights: null, thinking: null };
+const snapshot = { session: null, partials: {}, finals: [], muse: [], insights: null, thinking: null, round: null, plan: null };
 
 function broadcast(type, data) {
   const frame = `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -20,6 +20,8 @@ bus.on('session', (s) => {
     snapshot.finals = [];
     snapshot.partials = {};
     snapshot.insights = null;
+    snapshot.round = null;
+    snapshot.plan = null;
   }
   snapshot.session = s;
   broadcast('session', s);
@@ -39,6 +41,15 @@ bus.on('final', (entry) => {
 bus.on('insights', (i) => {
   snapshot.insights = i;
   broadcast('insights', i);
+});
+// Round = names + replied/waiting only. Plan = the guarded public plan. No private answers exist on this bus.
+bus.on('round', (r) => {
+  snapshot.round = r;
+  broadcast('round', r);
+});
+bus.on('plan', (p) => {
+  snapshot.plan = p;
+  broadcast('plan', p);
 });
 bus.on('thinking', (t) => {
   snapshot.thinking = t.active ? t : null;

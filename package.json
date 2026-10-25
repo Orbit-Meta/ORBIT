@@ -4,7 +4,8 @@
   "description": "Orbit: AI social planning copilot powered by Meta Muse",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "test:privacy": "node scripts/privacy-check.mjs"
   },
   "repository": {
     "type": "git",

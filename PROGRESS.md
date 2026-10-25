@@ -6,8 +6,8 @@
 | 1. Bot skeleton + **voice receive spike** + crew self-registration | ✅ Done; verified live by Sasha |
 | 2. Voice capture + Muse Voice Transcribe + live screen (transcript) | ✅ Done; live call produced an accurate 13-line, speaker-labeled transcript |
 | 3. Muse Spark summary + live screen (rolling insights, reasoning) | ✅ Done |
-| 3b. "Any questions, Meta?" spoken gap questions | 🧪 Done and tested with real Muse Spark + MMS-TTS; waiting for your live test in a call |
-| 4. Private constraints + plan resolution | ⏳ Not started |
+| 3b. "Any questions, Meta?" spoken gap questions | ✅ Done |
+| 4. Private constraints + plan resolution | 🧪 Done; `npm run test:privacy` passes with real Muse Spark; waiting for your live DM test |
 | 5. Google Calendar | ⏳ Not started |
 | 6. Demo hardening | ⏳ Not started |
 
@@ -121,6 +121,36 @@
 - **Fully settled plan:** "Nope, I think you've covered everything I need."
 - **TTS:** 9.1 s of speech became 452 Opus packets (about 453 expected), through the real `createAudioResource` path.
 - **Fixed:** questions without a question mark ran together when spoken; punctuation is now added.
+
+### Phase 4 decisions
+- **When check-ins start:** right after the end-of-call recap (`/stop` or everyone leaving).
+  - Orbit DMs registered crew members who missed the call, plus everyone in the call when `DM_EVERYONE=true`.
+  - In-call people get a "Anything you'd rather not say in front of everyone?" framing.
+  - `/ask @person` adds someone by hand.
+  - Anyone who registers (`/link-email`) while check-ins are open is DM'd automatically.
+  - People Muse Spark says we still need who aren't registered (e.g. Angel) are named in the status message with a prompt to run `/link-email`.
+- **The DM:** a card with public plan info, plus **Answer privately** (opens one form: option dropdown, when free, budget, dietary needs, anything else) and **I can't make it**.
+  - Orbit replies in the DM with what it understood, visible only to that person.
+  - People can re-answer until the plan is resolved.
+- **Group status message:** edited in place. It shows only names and "✅ replied / ⏳ waiting / ⚠️ couldn't DM". Declining also shows "replied" (zero-ego).
+- **Resolving:** automatic when nobody is still waiting; `/resolve` forces it with the replies so far.
+  - The plan is posted as a green "It's a plan" embed with When, Where, and Who's coming.
+  - The public plan is saved to `data/plans/<id>.json` for Phase 5 (Calendar).
+- **Privacy architecture:**
+  1. **Separate storage:** private answers and Spark's rationale are stored only in `data/private/<round>.json`. Only `src/plan/round.js` imports `privateStore.js` (verified by grep).
+  2. **No reasoning stream:** Muse Spark's reasoning summary is not streamed for the private steps. The live screen shows "🔒 Reasoning hidden."
+  3. **Leak guard:** `src/core/privacyGuard.js` collects every private term that wasn't said out loud in the call (words, plus money-like numbers). Spark's title, location, and announcement are checked against it; if anything matches, that text is replaced by a template built only from plan fields.
+  4. **Public-only messages:** group-facing builders (`format.js`) only receive public data.
+  5. **Safe return value:** `resolveRound()` never returns the private rationale to callers.
+- **Restarts:** round metadata (names and statuses only) is saved in `data/rounds/`, so DM buttons and `/resolve` keep working after a bot restart.
+
+### Phase 4 test results
+- **`npm run test:privacy`** (real Muse Spark, real round code, fake Discord client that records every message): **PASSED**.
+  - Canaries (sesame allergy, landlord inspection, brother's surgery, $13 and $11 budgets, vegetarian, a decline) were found in 0 of: group messages and edits, live-screen events, the public plan file.
+  - The same canaries were confirmed in the private store and in each owner's own DM. No one else's DM contained them.
+  - The leak guard caught a deliberately leaky message ("under $13 and sesame-free").
+  - The resolved plan was correct: Chipotle (sushi ruled out by the allergy and budgets) at 6:30 PM (Angel's window), with Jordan left out without explanation and a neutral announcement.
+- **The DM card and modal build valid Discord JSON:** 5 labeled fields, option dropdown, 39-character title.
 
 ## Verification log (2026-10-25)
 - **DAVE is mandatory:** Discord has enforced E2EE voice since March 2026.

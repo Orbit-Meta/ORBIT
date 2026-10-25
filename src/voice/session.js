@@ -8,6 +8,7 @@ import { createLiveNotes } from './liveNotes.js';
 import { Transcript } from './transcript.js';
 import { stateNotice } from '../discord/format.js';
 import { postRecap } from '../discord/recap.js';
+import { startRound } from '../plan/round.js';
 import { listPeople } from '../store/people.js';
 import { bus } from '../dashboard/bus.js';
 
@@ -45,9 +46,20 @@ class Session {
     return [...this.participantIds].map((id) => this.nameOf(id));
   }
 
-  /** Registered crew members who were never in this call: they get the recap ping (and DMs in Phase 4). */
+  /** Registered crew members who were never in this call: they get the recap ping and a private DM. */
   absentCrew() {
     return listPeople().filter((p) => !this.participantIds.has(p.id));
+  }
+
+  /** Everything a planning round needs (all public: names, summary, transcript). */
+  callInfo() {
+    return {
+      id: this.transcript.id,
+      summary: this.summary,
+      transcriptText: this.transcript.toText(),
+      inCall: [...this.participantIds].map((id) => ({ id, name: this.nameOf(id) })),
+      absent: this.absentCrew().map((p) => ({ id: p.id, name: p.name })),
+    };
   }
 
   /** Words Muse Voice Transcribe should listen for: everyone's names, plus our wake words. */
@@ -213,6 +225,11 @@ export async function onVoiceStateUpdate(oldState, newState) {
             console.error('[recap] failed after call ended:', err.message);
             note += ' ⚠️ I couldn\'t post the recap. Try `/recap`.';
           });
+      }
+      if (s.summary) {
+        await startRound(s.guild.client, s.guild.id, s.callInfo())
+          .then((r) => (note += ` Sent ${r.invited.length} private check-in${r.invited.length === 1 ? '' : 's'}.`))
+          .catch((err) => console.error('[round] could not start:', err.message));
       }
       await s.voiceChannel.send({ embeds: [stateNotice('👋', note)] }).catch(() => {});
     }
