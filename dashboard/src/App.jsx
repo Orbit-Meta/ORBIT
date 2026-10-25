@@ -1,28 +1,53 @@
 import { Header } from '@/components/Header';
+import { Sidebar } from '@/components/Sidebar';
+import { Overview } from '@/components/Overview';
 import { TranscriptCard } from '@/components/TranscriptCard';
 import { NotesCard } from '@/components/NotesCard';
-import { ActivityCard } from '@/components/ActivityCard';
+import { ActivityPanel } from '@/components/ActivityPanel';
+import { SoftText } from '@/components/motion';
 import { useOrbitStream } from '@/hooks/useOrbitStream';
+import { clockTime } from '@/lib/format';
+
+function Title({ session }) {
+  const sub = !session
+    ? 'Waiting for a call · type /join in Discord'
+    : session.state === 'ended'
+      ? `${session.channel} · call ended`
+      : `${session.channel} · started ${clockTime(session.startedAt).replace(/:\d\d(?= )/, '')}`;
+  return (
+    <div>
+      <h1 className="text-2xl font-bold tracking-tight">Live call</h1>
+      <p className="text-sm text-muted-foreground">
+        <SoftText text={sub} />
+      </p>
+    </div>
+  );
+}
 
 export default function App() {
   const s = useOrbitStream();
   return (
-    <div className="flex h-dvh flex-col">
-      <Header session={s.session} />
-      {/* Phones: one scrolling column with fixed-height cards. Desktop/projector: fills the screen, no page scroll. */}
-      <main className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto p-4 sm:gap-6 sm:p-6 lg:grid-cols-[minmax(0,1.55fr)_minmax(360px,1fr)] lg:overflow-hidden [&>*]:min-w-0 max-lg:[&_[data-slot=card]]:h-[70dvh]">
-        <TranscriptCard finals={s.finals} partials={s.partials} />
-        <div className="grid min-h-0 grid-cols-1 gap-4 sm:gap-6 lg:grid-rows-[minmax(0,3fr)_minmax(0,2fr)] [&>*]:min-w-0">
-          <NotesCard insights={s.insights} thinking={s.thinking} round={s.round} plan={s.plan} />
-          <ActivityCard muse={s.muse} />
+    <div className="h-dvh bg-frame xl:p-3">
+      <div className="flex h-full overflow-hidden bg-background xl:rounded-[28px]">
+        <Sidebar className="max-lg:hidden" session={s.session} finals={s.finals} partials={s.partials} />
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          <Header className="lg:hidden" session={s.session} />
+          <main className="min-h-0 flex-1 overflow-y-auto xl:overflow-hidden">
+            <div className="flex flex-col gap-5 p-4 sm:p-7 xl:h-full">
+              <Title session={s.session} />
+              <Overview finals={s.finals} muse={s.muse} insights={s.insights} thinking={s.thinking} plan={s.plan} />
+              <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(300px,1fr)] xl:min-h-0 xl:flex-1 max-xl:[&_[data-slot=card]]:h-[70dvh] [&>*]:min-w-0">
+                <TranscriptCard finals={s.finals} partials={s.partials} />
+                <NotesCard insights={s.insights} round={s.round} />
+              </div>
+              <ActivityPanel className="overflow-hidden rounded-3xl bg-secondary xl:hidden" muse={s.muse} />
+            </div>
+          </main>
         </div>
-      </main>
-      <footer className="flex h-10 shrink-0 items-center border-t px-4 text-xs text-muted-foreground sm:px-6">
-        <span className="min-w-0 truncate">
-          All AI in Orbit is Meta: <span className="text-foreground">Muse Voice Transcribe</span> · <span className="text-foreground">Muse Spark</span> ·{' '}
-          <span className="text-foreground">MMS-TTS</span>
-        </span>
-      </footer>
+
+        <ActivityPanel className="w-[340px] shrink-0 bg-secondary max-xl:hidden" muse={s.muse} />
+      </div>
     </div>
   );
 }

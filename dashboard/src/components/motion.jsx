@@ -221,6 +221,104 @@ export function SuccessCheck({ show, className, style }) {
   );
 }
 
+/* ── 35 Donut chart ── ring sectors with even gaps and rounded corners; segments morph to new
+   shares. Geometry and tween are the reference's ringPath/donut functions. */
+function bezier(x1, y1, x2, y2) {
+  return (t) => {
+    let lo = 0;
+    let hi = 1;
+    let u = t;
+    for (let i = 0; i < 24; i++) {
+      u = (lo + hi) / 2;
+      const x = 3 * u * (1 - u) * (1 - u) * x1 + 3 * u * u * (1 - u) * x2 + u * u * u;
+      if (x < t) lo = u;
+      else hi = u;
+    }
+    return 3 * u * (1 - u) * (1 - u) * y1 + 3 * u * u * (1 - u) * y2 + u * u * u;
+  };
+}
+function easeOf(value) {
+  const m = /cubic-bezier\(([^)]+)\)/.exec(value);
+  if (!m) return (t) => t;
+  const [a, b, c, d] = m[1].split(',').map(parseFloat);
+  return bezier(a, b, c, d);
+}
+function ringPath(cx, cy, ro, ri, a0, a1, gap, cr) {
+  const Ro = ro - cr;
+  const Ri = ri + cr;
+  const h = gap / 2 + cr;
+  if (Ro <= Ri) return '';
+  const dO = Math.asin(Math.min(1, h / Ro));
+  const dI = Math.asin(Math.min(1, h / Ri));
+  const o0 = a0 + dO;
+  const o1 = a1 - dO;
+  const i0 = a0 + dI;
+  const i1 = a1 - dI;
+  if (i1 - i0 <= 0 || o1 - o0 <= 0) return ''; // too small to draw
+  const pt = (r, a) => (cx + r * Math.sin(a)).toFixed(3) + ' ' + (cy - r * Math.cos(a)).toFixed(3);
+  const lo = o1 - o0 > Math.PI ? 1 : 0;
+  const li = i1 - i0 > Math.PI ? 1 : 0;
+  return `M${pt(Ro, o0)}A${Ro} ${Ro} 0 ${lo} 1 ${pt(Ro, o1)}L${pt(Ri, i1)}A${Ri} ${Ri} 0 ${li} 0 ${pt(Ri, i0)}Z`;
+}
+
+/** values and colors stay in the same order so each segment morphs into its own new share. */
+export function Donut({ values, colors, size = 140, thickness = 14, dim = -1, children }) {
+  const svgRef = useRef(null);
+  const current = useRef(null);
+  const raf = useRef(0);
+  useLayoutEffect(() => {
+    const svg = svgRef.current;
+    const segs = [...svg.querySelectorAll('.t-donut-seg')];
+    const c = size / 2;
+    const ro = c;
+    const ri = ro - thickness;
+    const token = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    const draw = (vals) => {
+      const total = vals.reduce((a, b) => a + b, 0);
+      const gap = parseFloat(token('--chart-gap')) || 0;
+      const cr = parseFloat(token('--chart-corner')) || 0;
+      const nonZero = vals.filter((v) => v > 0).length;
+      let a = 0;
+      vals.forEach((v, k) => {
+        const span = total ? (v / total) * Math.PI * 2 : 0;
+        // A single segment would leave a gap at the top; draw it as a full ring instead.
+        segs[k].setAttribute('d', nonZero === 1 && v > 0 ? ringPath(c, c, ro, ri, 0, Math.PI * 2 - 0.0001, 0, cr) : ringPath(c, c, ro, ri, a, a + span, gap, cr));
+        segs[k].style.strokeWidth = 2 * cr;
+        a += span;
+      });
+    };
+    cancelAnimationFrame(raf.current);
+    const from = current.current;
+    const to = values.slice();
+    current.current = to;
+    const dur = parseFloat(token('--chart-morph-dur')) || 0;
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!from || !dur || reduce) {
+      draw(to);
+      return;
+    }
+    const ease = easeOf(token('--chart-morph-ease'));
+    const t0 = performance.now();
+    (function step(now) {
+      const t = Math.min(1, (now - t0) / dur);
+      const e = ease(t);
+      draw(from.map((f, k) => f + (to[k] - f) * e));
+      if (t < 1) raf.current = requestAnimationFrame(step);
+    })(t0);
+  }, [values.join(','), size, thickness]);
+  useEffect(() => () => cancelAnimationFrame(raf.current), []);
+  return (
+    <div className="t-donut" style={{ width: size, height: size }}>
+      <svg ref={svgRef} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
+        {colors.map((color, k) => (
+          <path key={k} className={cn('t-donut-seg', dim >= 0 && dim !== k && 'is-dim')} style={{ fill: color, stroke: color }} />
+        ))}
+      </svg>
+      <div className="t-donut-center">{children}</div>
+    </div>
+  );
+}
+
 /* ── 07 Panel reveal ── mount closed, reflow, open; on hide, close and unmount after the
    close transition. Attach the returned ref to the .t-panel-slide element. */
 export function usePresence(value) {

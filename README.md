@@ -160,7 +160,11 @@ If live audio fails on stage, run **`/demo`** while you're in a voice channel. O
 ## The live screen
 
 `http://localhost:3000` is a React app in [`dashboard/`](dashboard/), built with **shadcn/ui** (Card, Badge, ScrollArea, Avatar, Separator) on Tailwind v4, using lucide icons and the Inter font bundled locally.
-- **Design:** minimal black and white. Meta blue `#0866FF` appears in only two places: the accent line beside Orbit's own spoken turn, and the calendar link. The final plan is the one inverted black card.
+- **Layout:**
+  - **Dark sidebar:** "Now speaking" with a big avatar, and everyone in the call with their talk time and share.
+  - **Main column:** stat tiles with sparklines (conversation, Meta AI calls), the black **plan** hero card (Muse Spark thinking, then the plan and calendar link), the transcript, and Muse Spark's notes.
+  - **Right panel:** "Meta AI at work" (a donut of calls per Meta tool) and recent activity as pill rows.
+- **Design:** black and white on a warm off-white canvas, set in Manrope. Meta blue `#0866FF` appears only on the "now speaking" ring, Orbit's own spoken turn, and the calendar link. Every widget shows real call data; there's no decorative chrome.
 - **Motion** comes from [transitions.dev](https://transitions.dev). The skill is in [`.claude/skills/transitions-dev/`](.claude/skills/transitions-dev/), and the snippets are pasted verbatim in [`dashboard/src/transitions.css`](dashboard/src/transitions.css), each with its reduced-motion guard. Only transitions for things that exist on this screen are used:
   - **Texts reveal:** new transcript lines, Orbit's spoken turn, new activity rows, empty states
   - **Streaming text:** live words while someone talks, and Muse Spark's reasoning
@@ -170,6 +174,7 @@ If live audio fails on stage, run **`/demo`** while you're in a voice channel. O
   - **Panel reveal:** the plan card and the thinking strip
   - **Number pop-in:** line count, Meta AI calls, latency
   - **Error state shake:** a failed Meta AI call
+  - **Donut chart:** Meta AI calls per tool, morphing as calls come in
 
   The React wrappers are in [`dashboard/src/components/motion.jsx`](dashboard/src/components/motion.jsx).
 - **Names** are each person's **server nickname**, falling back to their global display name, then username, exactly as they appear in your Discord server.

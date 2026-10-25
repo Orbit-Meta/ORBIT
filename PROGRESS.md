@@ -248,6 +248,21 @@
   - 18/18 reveals completed and every line ended at opacity 1.
   - The failed-call shake, 3 success checks, the panel reveal, number pop-ins, and streaming reasoning were all captured mid-animation.
 
+### Live screen redesign: warmer, reference-inspired layout (2026-10-25)
+- **Brief:** the screen looked "soulless". Sasha shared a reference dashboard (dark sidebar, cream canvas, rounded stat tiles with sparklines, a bold hero card, a donut with a legend, pill rows).
+- **Approach:** borrowed its structure and warmth, but kept the earlier rules (black and white, rare Meta blue, nothing fake). No search bar, no "Upgrade", no nav items for pages Orbit doesn't have.
+- **New layout:**
+  - **`Sidebar.jsx`:** "Now speaking" (big avatar with a soft Meta-blue ripple), and "In the call" with talk time and share bars (active speaker highlighted).
+  - **`Overview.jsx`:** Conversation and Meta AI calls tiles with sparklines; the black plan hero card (thinking states, then the plan and calendar link).
+  - **`ActivityPanel.jsx`:** "Meta AI at work" donut (transitions.dev #35, pasted verbatim) with a percentage legend; recent activity pill rows.
+  - The transcript and notes cards are restyled. The plan and thinking moved from the notes card into the hero card.
+- **Theme:** warm canvas `#f5f3ef`, sidebar `#191919`, sand tiles, warm-gray text (5:1 contrast on white), Manrope 5.3.0 bundled locally (replaces Inter). On wide screens the app sits in a rounded frame.
+- **Responsive:**
+  - At xl and up: sidebar, main column, and right panel.
+  - From lg up to xl: the right panel folds under the main column.
+  - Below lg: compact top bar, single column.
+- **Verified with CDP renders** at 1920, 1440, 1180, and 520: all reveals completed, no clipped text after moving the tile chips beside the number, and motion captured mid-animation.
+
 ## Verification log (2026-10-25)
 - **DAVE is mandatory:** Discord has enforced E2EE voice since March 2026.
 - **@discordjs/voice 0.19.2:** contains PR #11449, the probable DAVE receive fix. Not publicly confirmed; packet-loss issue #11441 was closed without a fix.

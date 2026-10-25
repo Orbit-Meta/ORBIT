@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Volume2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { SwapText } from '@/components/motion';
+import { cn } from '@/lib/utils';
 
 function Elapsed({ since }) {
   const [now, setNow] = useState(Date.now());
@@ -13,9 +14,9 @@ function Elapsed({ since }) {
   return <span className="font-mono text-sm tabular-nums text-muted-foreground">{`${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`}</span>;
 }
 
-export function Header({ session }) {
+export function Header({ session, className }) {
   return (
-    <header className="flex h-16 shrink-0 items-center gap-3 border-b px-4 sm:gap-4 sm:px-6">
+    <header className={cn('flex h-16 shrink-0 items-center gap-3 border-b bg-card px-4 sm:gap-4 sm:px-6', className)}>
       <div className="flex shrink-0 items-center gap-3">
         <img src="/orbit-logo.png" alt="" className="h-9 w-auto" />
         <span className="text-lg font-semibold tracking-tight">Orbit</span>

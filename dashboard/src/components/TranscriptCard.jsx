@@ -92,9 +92,9 @@ export function TranscriptCard({ finals, partials }) {
 
   const live = Object.values(partials);
   return (
-    <Card className="min-h-0 gap-0 py-0">
-      <CardHeader className="border-b py-4">
-        <CardTitle>Live transcript</CardTitle>
+    <Card className="min-h-0 gap-0 rounded-3xl border-0 py-0 shadow-[0_1px_2px_rgba(20,20,20,0.04)]">
+      <CardHeader className="px-7 pt-6 pb-3">
+        <CardTitle className="text-lg tracking-tight">Live transcript</CardTitle>
         <CardDescription>Muse Voice Transcribe · one stream per speaker</CardDescription>
         {finals.length > 0 && (
           <CardAction>
@@ -122,7 +122,7 @@ export function TranscriptCard({ finals, partials }) {
               </div>
             </Reveal>
           ) : (
-            <ol className="divide-y px-6" aria-label="Call transcript">
+            <ol className="divide-y divide-border/70 px-7" aria-label="Call transcript">
               {finals.map((e) => (
                 <Line key={`${e.userId}-${e.startedAt}`} entry={e} styleFor={styleFor} />
               ))}
