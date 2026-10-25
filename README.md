@@ -160,13 +160,25 @@ If live audio fails on stage, run **`/demo`** while you're in a voice channel. O
 ## The live screen
 
 `http://localhost:3000` is a React app in [`dashboard/`](dashboard/), built with **shadcn/ui** (Card, Badge, ScrollArea, Avatar, Separator) on Tailwind v4, using lucide icons and the Inter font bundled locally.
-- **Design:** minimal black and white. Meta blue `#0866FF` appears in exactly three places: the pulsing "Listening" dot, the accent line beside Orbit's own spoken turn, and the calendar link. The final plan is the one inverted black card.
+- **Design:** minimal black and white. Meta blue `#0866FF` appears in only two places: the accent line beside Orbit's own spoken turn, and the calendar link. The final plan is the one inverted black card.
+- **Motion** comes from [transitions.dev](https://transitions.dev). The skill is in [`.claude/skills/transitions-dev/`](.claude/skills/transitions-dev/), and the snippets are pasted verbatim in [`dashboard/src/transitions.css`](dashboard/src/transitions.css), each with its reduced-motion guard. Only transitions for things that exist on this screen are used:
+  - **Texts reveal:** new transcript lines, Orbit's spoken turn, new activity rows, empty states
+  - **Streaming text:** live words while someone talks, and Muse Spark's reasoning
+  - **Thinking states:** the shimmering "Muse Spark is thinking" line
+  - **Text swap soft:** notes values that update
+  - **Text states swap + success check:** a private check-in flipping to "Replied privately"
+  - **Panel reveal:** the plan card and the thinking strip
+  - **Number pop-in:** line count, Meta AI calls, latency
+  - **Error state shake:** a failed Meta AI call
+
+  The React wrappers are in [`dashboard/src/components/motion.jsx`](dashboard/src/components/motion.jsx).
 - **Names** are each person's **server nickname**, falling back to their global display name, then username, exactly as they appear in your Discord server.
 - **Building:** `npm start` builds the page first (under a second). The bot serves `dashboard/dist` and streams live updates over Server-Sent Events at `/events`.
 - **Working on the UI:** run the bot, then `npm run dashboard:dev` for hot reload. It proxies `/events` from the running bot.
 
 **Design tooling** (in the repo, for anyone using Claude Code):
 - [`.claude/skills/ui-ux-pro-max/`](.claude/skills/ui-ux-pro-max/): the UI UX Pro Max skill (MIT, [source](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill)). Its design-system search (Python 3) recommended the "Minimalism & Swiss Style, monochrome + one accent" direction used here. On Windows, run its script with `py -3`.
+- [`.claude/skills/transitions-dev/`](.claude/skills/transitions-dev/): the transitions.dev motion skill ([source](https://github.com/Jakubantalik/transitions.dev); free for personal and commercial use, but not to be redistributed as a competing library; see its `LICENSE.txt`).
 - [`.mcp.json`](.mcp.json): the **shadcn MCP server** (`shadcn@4.21.4 mcp`), so Claude Code can browse and add shadcn components. Approve it once with `/mcp` after starting Claude Code in this folder. [`components.json`](components.json) configures it.
 - After running `shadcn add`, check the new files import `cn` from `@/lib/utils`. The CLI's JavaScript output once wrote `from "cn"` and installed an unrelated npm package named `cn`.
 

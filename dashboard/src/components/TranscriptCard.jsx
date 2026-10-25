@@ -3,6 +3,7 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { PopNumber, Reveal, RevealLine, StreamText } from '@/components/motion';
 import { clockTime, initials } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
@@ -32,13 +33,19 @@ function SpeakerAvatar({ userId, name, styleFor }) {
   );
 }
 
+/**
+ * Finished lines rise in (texts reveal). Live lines stream their words in as Muse Voice Transcribe
+ * hears them; when that speaker finishes, the final line replaces them without replaying a reveal.
+ */
 function Line({ entry, partial, styleFor }) {
   const isOrbit = entry.userId === 'orbit';
   return (
-    <li className={cn('grid grid-cols-[36px_1fr] gap-3 py-3', isOrbit && 'border-l-2 border-l-meta pl-3')}>
-      <SpeakerAvatar userId={entry.userId} name={entry.speaker} styleFor={styleFor} />
+    <Reveal as="li" skip={entry.fromPartial} className={cn('grid grid-cols-[36px_1fr] gap-3 py-3', isOrbit && 'border-l-2 border-l-meta pl-3')}>
+      <RevealLine n={1}>
+        <SpeakerAvatar userId={entry.userId} name={entry.speaker} styleFor={styleFor} />
+      </RevealLine>
       <div className="min-w-0">
-        <div className="flex items-baseline gap-2">
+        <RevealLine n={1} className="flex items-baseline gap-2">
           <span className="text-sm font-semibold">{entry.speaker}</span>
           {isOrbit ? (
             <span className="text-xs text-muted-foreground">spoke in the call · Meta MMS-TTS</span>
@@ -51,10 +58,12 @@ function Line({ entry, partial, styleFor }) {
           ) : (
             <time className="text-xs tabular-nums text-muted-foreground">{clockTime(entry.startedAt)}</time>
           )}
-        </div>
-        <p className={cn('mt-0.5 text-[17px] leading-relaxed break-words', partial && 'text-muted-foreground')}>{entry.text}</p>
+        </RevealLine>
+        <RevealLine n={2} as="p" className={cn('mt-0.5 text-[17px] leading-relaxed break-words', partial && 'text-muted-foreground')}>
+          {partial ? <StreamText text={entry.text} /> : entry.text}
+        </RevealLine>
       </div>
-    </li>
+    </Reveal>
   );
 }
 
@@ -89,8 +98,8 @@ export function TranscriptCard({ finals, partials }) {
         <CardDescription>Muse Voice Transcribe · one stream per speaker</CardDescription>
         {finals.length > 0 && (
           <CardAction>
-            <Badge variant="secondary" className="tabular-nums">
-              {finals.length} {finals.length === 1 ? 'line' : 'lines'}
+            <Badge variant="secondary" className="gap-1">
+              <PopNumber value={finals.length} /> {finals.length === 1 ? 'line' : 'lines'}
             </Badge>
           </CardAction>
         )}
@@ -98,20 +107,24 @@ export function TranscriptCard({ finals, partials }) {
       <CardContent className="min-h-0 flex-1 px-0">
         <ScrollArea ref={scrollRef} className="h-full">
           {finals.length === 0 && live.length === 0 ? (
-            <div className="flex h-full min-h-72 flex-col items-center justify-center gap-4 px-6 text-center">
-              <img src="/orbit-logo.png" alt="" className="h-16 w-auto opacity-15" />
+            <Reveal className="flex h-full min-h-72 flex-col items-center justify-center gap-4 px-6 text-center">
+              <RevealLine n={1}>
+                <img src="/orbit-logo.png" alt="" className="h-16 w-auto opacity-15" />
+              </RevealLine>
               <div>
-                <p className="font-medium">Waiting for a call</p>
-                <p className="text-sm text-muted-foreground">
+                <RevealLine n={1} as="p" className="font-medium">
+                  Waiting for a call
+                </RevealLine>
+                <RevealLine n={2} as="p" className="text-sm text-muted-foreground">
                   Type <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">/join</code> in Discord, or{' '}
                   <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">/demo</code>
-                </p>
+                </RevealLine>
               </div>
-            </div>
+            </Reveal>
           ) : (
             <ol className="divide-y px-6" aria-label="Call transcript">
-              {finals.map((e, i) => (
-                <Line key={`${e.startedAt}-${i}`} entry={e} styleFor={styleFor} />
+              {finals.map((e) => (
+                <Line key={`${e.userId}-${e.startedAt}`} entry={e} styleFor={styleFor} />
               ))}
               {live.map((p) => (
                 <Line key={`live-${p.userId}`} entry={p} partial styleFor={styleFor} />

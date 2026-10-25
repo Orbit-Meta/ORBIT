@@ -27,8 +27,9 @@ function reducer(state, { type, data }) {
       return { ...state, partials: rest };
     }
     case 'final': {
-      const { [data.userId]: _, ...rest } = state.partials;
-      return { ...state, finals: [...state.finals, data], partials: rest };
+      const { [data.userId]: live, ...rest } = state.partials;
+      // If the words were already streaming in on screen, the final line takes their place quietly.
+      return { ...state, finals: [...state.finals, { ...data, fromPartial: Boolean(live) }], partials: rest };
     }
     case 'muse':
       return { ...state, muse: [...state.muse, data].slice(-MAX_MUSE_LOG) };

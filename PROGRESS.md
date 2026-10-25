@@ -232,6 +232,22 @@
   - Headless Edge on Windows renders at a minimum of about 500 px, so a 390 px screenshot looks like overflow when it isn't. Verified at 520 px.
 - **Screenshots checked** (headless Edge, preview data): 1440×900 with a full plan, the thinking state, and narrow width (520 px).
 
+### Live screen: status removed, transitions.dev motion (2026-10-25)
+- **Removed** (requested): the header status badge ("Idle", "Listening", etc.) with its dot, and "Connected" in the footer. The call timer stays.
+- **transitions.dev skill** installed in `.claude/skills/transitions-dev/` from `Jakubantalik/transitions.dev` commit `a3f22f3` (2026-10-25).
+  - Installed from GitHub after reading `SKILL.md` and checking the references for network calls (none), rather than through their `npx skills add` installer.
+  - License: free for personal and commercial use; just don't redistribute the library as a competing product.
+- **Motion:** 9 transitions, each matched to a real element using the skill's decision rules. Their CSS is pasted verbatim in `dashboard/src/transitions.css`, with `:root` variables and reduced-motion guards, imported into Tailwind's `components` layer so layout utilities still win.
+  - Not implemented, because this screen has no such elements: modals, dropdowns, toasts, tabs, tooltips, toggles, likes, accordions, etc.
+- **React glue** in `dashboard/src/components/motion.jsx` follows each reference's JS orchestration: reflow-then-class, and timings read from the CSS variables.
+  - Each wrapper animates only when its own value changes.
+  - Stable keys mean new rows don't replay old animations.
+  - A final line that replaces live streamed words doesn't re-reveal.
+- **Gotcha:** my first reveal trigger used `requestAnimationFrame`, which headless screenshot mode and background tabs never fire, so lines could stay hidden. Switched to the reference's reflow-then-add-class trigger.
+- **Verified** by driving headless Edge over the DevTools Protocol, with frames rendering normally:
+  - 18/18 reveals completed and every line ended at opacity 1.
+  - The failed-call shake, 3 success checks, the panel reveal, number pop-ins, and streaming reasoning were all captured mid-animation.
+
 ## Verification log (2026-10-25)
 - **DAVE is mandatory:** Discord has enforced E2EE voice since March 2026.
 - **@discordjs/voice 0.19.2:** contains PR #11449, the probable DAVE receive fix. Not publicly confirmed; packet-loss issue #11441 was closed without a fix.

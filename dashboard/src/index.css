@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "@fontsource-variable/inter";
+/* transitions.dev motion, in the components layer so Tailwind layout utilities (flex, grid) still win. */
+@import "./transitions.css" layer(components);
 
 @custom-variant dark (&:is(.dark *));
 
