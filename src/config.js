@@ -48,6 +48,7 @@ export const config = {
   timezone: validTimezone(env('TIMEZONE', 'America/New_York')),
   defaultArea: env('DEFAULT_AREA', 'Downtown'),
   dmEveryone: env('DM_EVERYONE', 'true') === 'true',
+  roundTimeoutMinutes: Number(env('ROUND_TIMEOUT_MINUTES', '10')), // nudge at half, then plan with the replies so far
   dashboardPort: Number(env('DASHBOARD_PORT', '3000')),
   voiceDebug: env('ORBIT_VOICE_DEBUG') === '1',
   dataDir: path.resolve(env('ORBIT_DATA_DIR', 'data')),

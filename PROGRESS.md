@@ -9,7 +9,7 @@
 | 3b. "Any questions, Meta?" spoken gap questions | ✅ Done |
 | 4. Private constraints + plan resolution | ✅ Done |
 | 5. Google Calendar | 🧪 Code complete and tested with Google traffic intercepted; waiting for you to run `npm run google:auth` and test live |
-| 6. Demo hardening | ⏳ Not started |
+| 6. Demo hardening | 🧪 Done; demo ran end-to-end 3× in a test harness (real Muse + MMS-TTS); waiting for your two live run-throughs |
 
 ## Decisions
 - **Runtime:** Node.js v24.21.0, npm 11.19.0.
@@ -177,6 +177,34 @@
 - **OAuth URL:** has the right scopes, PKCE S256, and `access_type=offline`.
 - **Not yet tested live:** the real Google sign-in and real event creation. Both need your browser sign-in.
 
+### Phase 6 decisions
+- **`/demo [script|audio|file]`** (`src/demo/runDemo.js`) runs a call through the same session and pipeline as a live one. Only the source of transcript lines changes.
+  - `script`: `demo/script.json` lines, typed out word by word on the live screen.
+  - `audio`: Meta MMS-TTS speaks each line into the realtime Muse Voice Transcribe path.
+  - `file`: `demo/call.wav` through Muse Voice Transcribe `DIARIZATION`.
+  - **Cast:** the person running `/demo` is speaker 1; another voice-channel member is speaker 2 (else "Jordan"); the first absent crew member is the absent friend (else "Angel"). Real people mean real DMs and invites.
+  - **No voice:** if Orbit can't join voice, the demo runs anyway and posts questions as text. `/stop` aborts a demo.
+- **Session refactor:** sessions can run without a voice connection. `addLine()` is shared by live audio, demo, and Orbit's own turns. `wrapUpCall()` (recap, then check-ins) is shared by `/stop`, everyone leaving, and demo.
+- **Error handling:**
+  - A no-audio watchdog posts a notice after 45 s.
+  - Lost transcriptions post a throttled notice in the call chat.
+  - Muse Spark retries once on 429, 5xx, network errors, and timeouts.
+  - The group is told when questions or plan resolution fail, and how to retry.
+  - People who never reply get a private nudge at half of `ROUND_TIMEOUT_MINUTES` (default 10). At the deadline Orbit posts "Still waiting on…" and plans with the replies it has.
+  - Starting a new round closes the previous unfinished one, so a second demo run isn't disturbed by the first run's timers.
+- **`npm run check`** preflight: config, Muse key and models (via `GET /models`, no AI call), Discord bot/server/channel, Google Calendar (warns when the sign-in is older than 5 days), TTS model cache, crew count, demo files, and the live-screen port.
+- **README** written: setup, architecture diagram, where Meta AI is used, privacy design, commands, demo mode, troubleshooting.
+- **`META_USAGE.md`** rewritten: TTS lives in `tts.js` (not `muse.js`), and demo call sites were added.
+
+### Phase 6 test results
+- **Demo harness** (fake Discord, real Muse + MMS-TTS, throwaway data), run back to back:
+  - `audio` (79 s): 9 MMS-TTS clips went through 9 realtime Muse transcriptions. The wake phrase was heard. Orbit asked only the 2 real gaps. Recap, 2 DMs, then a plan: **Chipotle, Downtown, Fri 6:30 PM**. MMS's robotic voice caused mishearings ("chapattle"), but Muse Spark still resolved Chipotle.
+  - `script` (33 s): the same flow, with a clean transcript.
+  - `file` (16 s): the diarization API path works. The synthetic single-voice WAV was correctly heard as one speaker; a real two-person recording is still untested.
+- **Timeout test:** round A was replaced by round B, and A's DM button says so. Only B's 2 people were nudged. At the deadline: "⏰ Still waiting on…", then the plan, then a calendar notice.
+- **`npm run test:privacy`:** still passes (regression).
+- **`npm run check`:** all credentials valid. Warnings: Google not signed in; only 1 crew member registered; port 3000 in use (bot running).
+
 ## Verification log (2026-10-25)
 - **DAVE is mandatory:** Discord has enforced E2EE voice since March 2026.
 - **@discordjs/voice 0.19.2:** contains PR #11449, the probable DAVE receive fix. Not publicly confirmed; packet-loss issue #11441 was closed without a fix.
@@ -191,7 +219,11 @@
 - **Phase 1 live test passed.** Sasha confirmed `/orbit-setup` and separate per-speaker audio streams both worked. Two speakers each produced a clean 10.0 s WAV.
   - **Voice receive works with DAVE on @discordjs/voice 0.19.2** in a regular voice channel, so the Stage fallback wasn't needed.
 - **Minor:** a display name with no letters or digits turns into the filename `_`. This only affects the Phase 1 WAV files, which Phase 2 removes.
-- **Angel (Partner 3) hasn't registered yet**, so the recap can't @mention them. They need to click Join Orbit or run `/link-email` before the Phase 4 DMs.
+- **Before the demo:**
+  - Run `npm run google:auth` (not done yet).
+  - Everyone registers (only 1 has so far).
+  - Restart the bot so it registers `/demo`.
+- **Round timers don't survive a bot restart.** Rounds restored from disk have no nudge or timeout; use `/resolve`.
 - **Echo risk:** if someone in the call uses speakers instead of headphones, their mic may pick up Orbit's voice and transcribe it as their line. Use headphones for the demo.
 - **TTS and non-Latin names:** MMS-TTS (English) can't pronounce non-Latin names like "лс забанили"; they're skipped in speech but still shown in text.
 - **Display names in transcripts:** a speaker label is the person's Discord display name (e.g. "лс забанили"). For the demo, consider readable display names.

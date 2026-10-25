@@ -37,8 +37,7 @@ export async function answerQuestions(session, { by, fromVoice = false }) {
     console.log(`[questions] Orbit: ${result.spokenText}`);
 
     // Orbit's turn goes into the transcript so people's answers make sense to Muse Spark later.
-    const now = new Date().toISOString();
-    bus.emit('final', session.transcript.add({ userId: 'orbit', speaker: 'Orbit', startedAt: now, endedAt: now, text: result.spokenText }));
+    session.addLine({ userId: 'orbit', speaker: 'Orbit', text: result.spokenText });
 
     const lines = result.questions.map((q) => `• ${q.text}`);
     if (!lines.length) lines.push("• Nothing! You've covered everything I need.");
@@ -57,6 +56,7 @@ export async function answerQuestions(session, { by, fromVoice = false }) {
 }
 
 async function speak(session, text) {
+  if (!session.player) return; // no voice connection (voiceless demo): the text post is enough
   const { pcm, durationMs } = await synthesize(text);
   session.player.play(createAudioResource(Readable.from([pcm]), { inputType: StreamType.Raw }));
   await entersState(session.player, AudioPlayerStatus.Playing, 5_000);

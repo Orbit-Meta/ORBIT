@@ -171,15 +171,16 @@ export function transcribe({ keywords = [], languageBias = DEFAULT_LANGUAGES, on
 
 /**
  * Muse Voice Transcribe, file upload (POST /asr/transcribe). WAV, mono, 16 or 24 kHz, ≤10 min.
- * Used when a realtime stream fails, and by demo mode (Phase 6).
+ * Used when a realtime stream fails, and by demo mode with mode 'DIARIZATION' (speaker-labeled turns).
+ * @returns {{ text, sessionId, turns: { turnId, startMs, endMs, transcript, speaker? }[] }}
  */
-export async function transcribeFile(wav, { keywords = [], languageBias = DEFAULT_LANGUAGES } = {}) {
+export async function transcribeFile(wav, { keywords = [], languageBias = DEFAULT_LANGUAGES, mode = 'PUSH_TO_TALK' } = {}) {
   requireEnv('MODEL_API_KEY');
   const started = Date.now();
   const form = new FormData();
   form.append(
     'request',
-    new Blob([JSON.stringify({ model: config.muse.transcribeModel, audioEncoding: 'WAV', mode: 'PUSH_TO_TALK', keywords, languageBias })], {
+    new Blob([JSON.stringify({ model: config.muse.transcribeModel, audioEncoding: 'WAV', mode, keywords, languageBias })], {
       type: 'application/json',
     }),
   );
@@ -194,8 +195,16 @@ export async function transcribeFile(wav, { keywords = [], languageBias = DEFAUL
     if (!res.ok) throw new Error(`Muse Voice Transcribe file upload failed: HTTP ${res.status} ${await res.text()}`);
     const json = await res.json();
     const text = (json.transcript ?? '').trim();
-    logCall({ tool: 'Muse Voice Transcribe', endpoint: 'file', ok: true, ms: Date.now() - started, sessionId: json.sessionId, note: `${text.split(/\s+/).filter(Boolean).length} words` });
-    return { text, sessionId: json.sessionId };
+    const turns = json.turns ?? [];
+    logCall({
+      tool: 'Muse Voice Transcribe',
+      endpoint: mode === 'DIARIZATION' ? 'file · speaker labels' : 'file',
+      ok: true,
+      ms: Date.now() - started,
+      sessionId: json.sessionId,
+      note: `${text.split(/\s+/).filter(Boolean).length} words${turns.length ? ` · ${turns.length} turns` : ''}`,
+    });
+    return { text, sessionId: json.sessionId, turns };
   } catch (err) {
     logCall({ tool: 'Muse Voice Transcribe', endpoint: 'file', ok: false, ms: Date.now() - started, note: err.message });
     throw err;
@@ -213,9 +222,23 @@ export async function transcribeFile(wav, { keywords = [], languageBias = DEFAUL
  *     onReasoning: (summarySoFar) => {},  // Spark's reasoning summary as it streams
  *   });
  *
- * store: false — Meta doesn't keep these responses (private constraints pass through here later).
+ * store: false — Meta doesn't keep these responses (private constraints pass through here).
+ * Retries once on rate limits, server errors, network failures, and timeouts.
  */
-export async function reason({ task, instructions, input, schema, schemaName, effort = 'low', onReasoning, maxOutputTokens = 8000, timeoutMs = 90_000 }) {
+export async function reason(args) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await reasonOnce(args);
+    } catch (err) {
+      const retryable = err.retryable || ['TimeoutError', 'AbortError', 'TypeError', 'SyntaxError'].includes(err.name);
+      if (attempt >= 2 || !retryable) throw err;
+      console.warn(`[muse] Muse Spark (${args.task}) failed: ${err.message}. Retrying once…`);
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  }
+}
+
+async function reasonOnce({ task, instructions, input, schema, schemaName, effort = 'low', onReasoning, maxOutputTokens = 8000, timeoutMs = 90_000 }) {
   requireEnv('MODEL_API_KEY');
   const started = Date.now();
   let reasoning = '';
@@ -242,7 +265,11 @@ export async function reason({ task, instructions, input, schema, schemaName, ef
       }),
       signal: AbortSignal.timeout(timeoutMs),
     });
-    if (!res.ok) throw new Error(`Muse Spark HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    if (!res.ok) {
+      const err = new Error(`Muse Spark HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+      err.retryable = res.status === 429 || res.status >= 500;
+      throw err;
+    }
 
     for await (const event of readServerSentEvents(res.body)) {
       switch (event.type) {
@@ -266,7 +293,7 @@ export async function reason({ task, instructions, input, schema, schemaName, ef
       }
     }
 
-    if (!response) throw new Error('Muse Spark stream ended without a final response');
+    if (!response) throw Object.assign(new Error('Muse Spark stream ended without a final response'), { retryable: true });
     if (response.status !== 'completed') {
       const why = response.error?.message ?? response.incomplete_details?.reason ?? response.status;
       throw new Error(`Muse Spark response ${response.status}: ${why}`);

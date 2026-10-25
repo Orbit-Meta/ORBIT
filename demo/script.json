@@ -1,0 +1,19 @@
+{
+  "title": "Friday dinner (Orbit demo)",
+  "cast": {
+    "s1": "Whoever runs /demo",
+    "s2": "Another person in your voice channel, or \"Jordan\" if you're alone",
+    "absent": "The first Orbit crew member who isn't in the call, or \"Angel\""
+  },
+  "lines": [
+    { "speaker": "s1", "text": "Hey {s2}! How was your day?" },
+    { "speaker": "s2", "text": "Long, but good. I just got off my shift." },
+    { "speaker": "s1", "text": "Nice. Are we still doing dinner this Friday with {absent}?" },
+    { "speaker": "s2", "text": "Yeah! I have a thing at two, but I'm free after five." },
+    { "speaker": "s1", "text": "I'm free all day Friday. Idk if I want Chipotle or McDonald's, both sound fire." },
+    { "speaker": "s2", "text": "The Chipotle downtown is close to me, but McDonald's works too." },
+    { "speaker": "s1", "text": "Okay. Any questions, Meta?" },
+    { "speaker": "s2", "text": "Let's say around six thirty." },
+    { "speaker": "s1", "text": "Works for me. Orbit, check with {absent} for us." }
+  ]
+}

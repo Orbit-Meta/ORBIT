@@ -23,7 +23,7 @@ import { collectConstraints } from '../core/collectConstraints.js';
 import { resolvePlan } from '../core/resolvePlan.js';
 import { createEvent } from '../core/createEvent.js';
 import { isCalendarConnected } from '../google/auth.js';
-import { calendarEmbed, checkInEmbed, checkInStatusEmbed, planEmbed } from '../discord/format.js';
+import { calendarEmbed, checkInEmbed, checkInStatusEmbed, planEmbed, stateNotice } from '../discord/format.js';
 import { readJson, writeJson } from '../store/jsonFile.js';
 import { getPerson } from '../store/people.js';
 import { readPrivate, savePrivateAnswer, savePrivateRationale } from '../store/privateStore.js';
@@ -65,7 +65,7 @@ export function getActiveRound(guildId) {
 /** The newest plan that was resolved but didn't make it onto the calendar (e.g. sign-in expired). */
 export function getPlanMissingCalendar(guildId) {
   const round = latestRound(guildId);
-  return round?.resolved && round.plan?.feasible && !round.calendar ? round : null;
+  return round?.resolved && !round.superseded && round.plan?.feasible && !round.calendar ? round : null;
 }
 
 /** What the group and the live screen may see. */
@@ -106,6 +106,15 @@ async function refreshStatus(client, round) {
  * @param {{ id, summary, transcriptText, inCall: {id, name}[], absent: {id, name}[] }} call
  */
 export async function startRound(client, guildId, call) {
+  // A newer call replaces any unfinished check-ins (its timers and DM buttons stop working).
+  const previous = getActiveRound(guildId);
+  if (previous) {
+    previous.resolved = true;
+    previous.superseded = true;
+    saveRound(previous);
+    console.log(`[round] closed unfinished check-ins ${previous.id} (replaced by a newer call)`);
+  }
+
   const round = {
     id: call.id,
     guildId,
@@ -129,7 +138,38 @@ export async function startRound(client, guildId, call) {
 
   for (const person of recipients) await invite(client, round, person);
   await refreshStatus(client, round);
+  scheduleDeadline(client, round);
   return publicState(round);
+}
+
+// ─── People who never reply: a private nudge at half-time, then plan without them ──
+
+function scheduleDeadline(client, round) {
+  const total = config.roundTimeoutMinutes * 60_000;
+  setTimeout(() => nudgePending(client, round).catch((err) => console.warn('[round] nudge failed:', err.message)), total / 2).unref();
+  setTimeout(() => timeOut(client, round).catch((err) => console.warn('[round] timeout failed:', err.message)), total).unref();
+}
+
+async function nudgePending(client, round) {
+  if (round.resolved) return;
+  const minutesLeft = Math.max(1, Math.round(config.roundTimeoutMinutes / 2));
+  for (const [id, p] of Object.entries(round.invited)) {
+    if (p.status !== 'pending') continue;
+    const user = await client.users.fetch(id).catch(() => null);
+    await user
+      ?.send(`👋 Friendly nudge: your friends are planning **${round.summary.headline}**. Tap **Answer privately** above (or **I can't make it**). I'll make the plan with the replies I have in about ${minutesLeft} min.`)
+      .catch(() => {});
+    console.log(`[round] nudged ${p.name}`);
+  }
+}
+
+async function timeOut(client, round) {
+  if (round.resolved || round.resolving) return;
+  const waiting = Object.values(round.invited).filter((p) => p.status === 'pending').map((p) => p.name);
+  if (!waiting.length) return;
+  const channel = await groupChannel(client);
+  await channel.send({ embeds: [stateNotice('⏰', `Still waiting on ${waiting.join(', ')}, so I'm planning with the replies I have. Nobody stays stuck waiting.`)] });
+  await resolveRound(client, round);
 }
 
 /** DM one more person into the round (late registration or /ask). */
@@ -196,6 +236,7 @@ export async function handleRoundInteraction(interaction) {
   const round = getRound(roundId);
   const me = round?.invited[interaction.user.id];
   if (!round || !me) return interaction.reply({ content: 'This check-in is no longer active.' });
+  if (round.superseded) return interaction.reply({ content: 'This check-in was replaced by a newer call. Look for the latest DM from me.' });
   if (round.resolved) return interaction.reply({ content: 'The plan is already set. Check the group channel!' });
 
   if (action === 'answer') return interaction.showModal(answerModal(round));
@@ -260,7 +301,12 @@ function privateAck(c) {
 async function afterAnswer(client, round) {
   await refreshStatus(client, round).catch((err) => console.warn('[round] status update failed:', err.message));
   const waiting = Object.values(round.invited).filter((p) => p.status === 'pending');
-  if (waiting.length === 0) await resolveRound(client, round).catch((err) => console.error('[round] resolve failed:', err.message));
+  if (waiting.length) return;
+  await resolveRound(client, round).catch(async (err) => {
+    console.error('[round] resolve failed:', err.message);
+    const channel = await groupChannel(client).catch(() => null);
+    await channel?.send({ embeds: [stateNotice('⚠️', `Everyone replied, but Muse Spark couldn't make the plan just now (${err.message}). Use \`/resolve\` to try again.`)] });
+  });
 }
 
 // ─── Resolving ─────────────────────────────────────────────────────────────

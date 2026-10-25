@@ -2,6 +2,7 @@ import { InteractionContextType, SlashCommandBuilder } from 'discord.js';
 import * as voice from './voice.js';
 import * as crew from './crew.js';
 import { handleRoundInteraction } from '../plan/round.js';
+import { DEMO_MODES } from '../demo/runDemo.js';
 
 const commands = [
   { name: 'join', description: 'Orbit joins your voice channel and starts taking notes', run: voice.join },
@@ -16,6 +17,18 @@ const commands = [
     description: 'Send someone a private check-in for the current plan',
     options: (b) => b.addUserOption((o) => o.setName('person').setDescription('Who to DM').setRequired(true)),
     run: voice.ask,
+  },
+  {
+    name: 'demo',
+    description: 'Replay a call through the same Meta pipeline (backup if live audio fails)',
+    options: (b) =>
+      b.addStringOption((o) =>
+        o
+          .setName('mode')
+          .setDescription('Where the call comes from (default: script)')
+          .addChoices(Object.entries(DEMO_MODES).map(([value, name]) => ({ name: `${value}: ${name}`.slice(0, 100), value }))),
+      ),
+    run: voice.demo,
   },
   { name: 'orbit-setup', description: 'Post a "Join Orbit" button so people can link their email', run: crew.orbitSetup },
   { name: 'link-email', description: 'Link (or change) the email Orbit sends your calendar invites to', run: crew.showLinkModal },

@@ -1,10 +1,11 @@
 import path from 'node:path';
 import { MessageFlags, PermissionFlagsBits } from 'discord.js';
 import { requireEnv } from '../config.js';
-import { endSession, getRecentSession, getSession, pauseSession, resumeSession, startSession } from '../voice/session.js';
+import { endSession, getRecentSession, getSession, pauseSession, resumeSession, startSession, wrapUpCall } from '../voice/session.js';
 import { postRecap } from '../discord/recap.js';
 import { answerQuestions } from '../voice/askMeta.js';
-import { addToCalendar, getActiveRound, getPlanMissingCalendar, inviteToRound, resolveRound, startRound } from '../plan/round.js';
+import { runDemo } from '../demo/runDemo.js';
+import { addToCalendar, getActiveRound, getPlanMissingCalendar, inviteToRound, resolveRound } from '../plan/round.js';
 import { listeningNotice, stateNotice } from '../discord/format.js';
 
 const ephemeral = (content) => ({ content, flags: MessageFlags.Ephemeral });
@@ -68,27 +69,8 @@ export async function stop(interaction) {
   lines.push('', n ? `📝 Transcript: ${n} line${n === 1 ? '' : 's'} saved to \`${path.relative(process.cwd(), s.transcript.txtFile)}\`` : '📝 Nothing was transcribed.');
   if (s.failedUtterances) lines.push(`⚠️ ${s.failedUtterances} utterance(s) couldn't be transcribed (see the bot console).`);
 
-  // The call is over: post the recap unless /recap already covered every line.
-  if (n > s.recappedLines) {
-    await interaction.editReply({ embeds: [stateNotice('⏹️', [...lines, '🧠 Muse Spark is writing the recap…'].join('\n'))] });
-    try {
-      const r = await postRecap(s);
-      lines.push(`🧠 Recap posted in <#${r.channel.id}>.`);
-    } catch (err) {
-      console.error('[recap] failed:', err);
-      lines.push(`⚠️ Muse Spark couldn't write the recap (${err.message}). Try \`/recap\`.`);
-    }
-  }
-  // Then ask everyone privately for the constraints they didn't say out loud.
-  if (s.summary) {
-    try {
-      const r = await startRound(interaction.client, interaction.guildId, s.callInfo());
-      lines.push(`📬 Sent ${r.invited.length} private check-in${r.invited.length === 1 ? '' : 's'} by DM.`);
-    } catch (err) {
-      console.error('[round] could not start:', err);
-      lines.push(`⚠️ Couldn't send private check-ins: ${err.message}`);
-    }
-  }
+  if (n > s.recappedLines) await interaction.editReply({ embeds: [stateNotice('⏹️', [...lines, '🧠 Muse Spark is writing the recap…'].join('\n'))] });
+  lines.push(...(await wrapUpCall(s))); // recap, then private check-ins
   return interaction.editReply({ embeds: [stateNotice('⏹️', lines.join('\n'))] });
 }
 
@@ -122,6 +104,23 @@ export async function ask(interaction) {
   const member = await interaction.guild.members.fetch(user.id).catch(() => null);
   const added = await inviteToRound(interaction.client, round, { id: user.id, name: member?.displayName ?? user.username });
   return interaction.editReply(added ? `📬 Sent ${user} a private check-in.` : `${user} already has a check-in.`);
+}
+
+/** Backup for the stage: replay a call through the same Meta pipeline (see src/demo/runDemo.js). */
+export async function demo(interaction) {
+  const mode = interaction.options.getString('mode') ?? 'script';
+  if (getSession(interaction.guildId)) return interaction.reply(ephemeral("I'm already in a call. Use `/stop` first, then `/demo`."));
+  try {
+    requireEnv('MODEL_API_KEY');
+  } catch (err) {
+    return interaction.reply(ephemeral(`⚠️ ${err.message}`));
+  }
+  await interaction.reply(ephemeral(`🎬 Starting the demo (${mode})${interaction.member.voice?.channel ? ` in 🔊 **${interaction.member.voice.channel.name}**` : ' without voice (join a voice channel first if you want Orbit to speak)'}.`));
+  runDemo({ guild: interaction.guild, member: interaction.member, textChannel: interaction.channel, mode }).catch(async (err) => {
+    console.error('[demo] failed:', err);
+    await interaction.followUp(ephemeral(`⚠️ Demo stopped: ${err.message}`)).catch(() => {});
+    if (getSession(interaction.guildId)?.demo) await endSession(interaction.guildId);
+  });
 }
 
 /** Same as saying "Any questions, Meta?" in the call. */

@@ -25,16 +25,17 @@ export function warmUpTts() {
 }
 
 /**
- * Text → 48 kHz stereo 16-bit PCM, ready for Discord (StreamType.Raw).
+ * Text → 16-bit PCM. Default: 48 kHz stereo, ready for Discord (StreamType.Raw).
+ * Demo mode asks for 24 kHz mono, the format Muse Voice Transcribe takes.
  * @returns {Promise<{ pcm: Buffer, durationMs: number }>}
  */
-export async function synthesize(text) {
+export async function synthesize(text, { sampleRate = 48000, channels = 2 } = {}) {
   const started = Date.now();
   const spoken = normalizeForSpeech(text);
   try {
     const tts = await warmUpTts();
     const { audio, sampling_rate: rate } = await tts(spoken);
-    const pcm = toDiscordPcm(audio, rate);
+    const pcm = toPcm(audio, rate, sampleRate, channels);
     const durationMs = Math.round((audio.length / rate) * 1000);
     bus.emit('muse', {
       at: Date.now(),
@@ -51,24 +52,23 @@ export async function synthesize(text) {
   }
 }
 
-/** Mono float samples at `rate` → 48 kHz stereo int16, peak-normalized, linear resampling. */
-function toDiscordPcm(samples, rate) {
+/** Mono float samples at `rate` → int16 PCM at `outRate` with `channels`, peak-normalized, linear resampling. */
+function toPcm(samples, rate, outRate, channels) {
   let peak = 0;
   for (const s of samples) peak = Math.max(peak, Math.abs(s));
   const gain = peak > 0 ? 0.9 / peak : 1;
-  const ratio = rate / 48000;
+  const ratio = rate / outRate;
   const outLen = Math.floor(samples.length / ratio);
-  const out = Buffer.alloc(outLen * 4);
+  const frame = channels * 2;
+  const out = Buffer.alloc(outLen * frame);
   for (let i = 0; i < outLen; i++) {
     const pos = i * ratio;
     const j = Math.floor(pos);
     const frac = pos - j;
     const a = samples[j] ?? 0;
     const b = samples[j + 1] ?? a;
-    const v = Math.max(-1, Math.min(1, (a + (b - a) * frac) * gain));
-    const int = Math.round(v * 32767);
-    out.writeInt16LE(int, i * 4);
-    out.writeInt16LE(int, i * 4 + 2);
+    const int = Math.round(Math.max(-1, Math.min(1, (a + (b - a) * frac) * gain)) * 32767);
+    for (let c = 0; c < channels; c++) out.writeInt16LE(int, i * frame + c * 2);
   }
   return out;
 }

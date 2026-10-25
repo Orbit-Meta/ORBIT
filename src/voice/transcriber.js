@@ -39,15 +39,12 @@ export function createTranscriberSink(session) {
       } catch (err2) {
         session.failedUtterances++;
         console.error(`[transcribe] lost an utterance from ${u.speaker}: ${err2.message}`);
+        session.notice('transcribe', '⚠️', "Muse Voice Transcribe isn't responding, so I'm missing some of what's said. If it keeps happening, `/stop` and run `/demo`.");
       }
     }
     bus.emit('partial-clear', { userId: u.userId });
     if (!text) return;
-
-    const entry = session.transcript.add({ userId: u.userId, speaker: u.speaker, startedAt: u.startedAt, endedAt, text });
-    console.log(`[transcript] ${u.speaker}: ${text}`);
-    bus.emit('final', entry);
-    session.onTranscriptLine?.(entry);
+    session.addLine({ userId: u.userId, speaker: u.speaker, startedAt: u.startedAt, endedAt, text });
   }
 
   return {
